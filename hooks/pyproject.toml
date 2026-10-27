@@ -1,0 +1,51 @@
+[project]
+name = "claude-office-hooks"
+version = "0.25.0"
+description = "Hooks for Claude Office Visualizer"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "defusedxml>=0.7.1",
+]
+
+[project.scripts]
+claude-office-hook = "claude_office_hooks.main:main"
+gemini-office-hook = "claude_office_hooks.gemini_main:main"
+codex-office-hook = "claude_office_hooks.codex_main:main"
+
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "N",
+    "W",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+]
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+include = [
+    "src",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]

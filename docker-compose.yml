@@ -1,0 +1,57 @@
+# Claude Office Visualizer - Docker Compose Configuration
+#
+# Usage:
+#   docker compose up -d          # Start in background
+#   docker compose logs -f        # View logs
+#   docker compose down           # Stop and remove containers
+#
+# For development with hot-reload, use 'make dev' instead.
+
+services:
+  claude-office:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claude-office
+    # Loopback-only on the HOST: this is a localhost tool (SEC-004).
+    # Inside the container requests come from the Docker gateway, so the
+    # in-app IP check is disabled via LOCALHOST_ONLY=0 below.
+    ports:
+      - "127.0.0.1:8050:8000"
+    volumes:
+      # Mount Claude data directory (read-only for security)
+      # The hooks write JSONL transcripts here; backend reads them for token usage
+      - ${CLAUDE_DATA_DIR:-~/.claude}:/claude-data:ro
+      # Persist SQLite database
+      - claude-office-db:/app/data
+    environment:
+      # Path translation for Docker. Defaults to the standard Claude config
+      # location so transcript paths reported by the host hooks are translated
+      # into container paths by default. Override when CLAUDE_DATA_DIR moves
+      # ~/.claude elsewhere.
+      # Host path prefix that appears in transcript_path from hooks
+      - CLAUDE_PATH_HOST=${CLAUDE_PATH_HOST:-$HOME/.claude}
+      # Container path where ~/.claude is mounted
+      - CLAUDE_PATH_CONTAINER=/claude-data
+      # Database location (use mounted volume for persistence)
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/visualizer.db
+      # Claude API settings (optional - enables AI summaries)
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - SUMMARY_ENABLED=${SUMMARY_ENABLED:-true}
+      - SERVE_STATIC=1
+      - LOCALHOST_ONLY=0
+      # Browser WS handshakes are origin-checked against this list (QA-014)
+      - BACKEND_CORS_ORIGINS=["http://localhost:8050","http://127.0.0.1:8050"]
+      # Plain tracebacks in containers (SEC-006)
+      - LOG_RICH_TRACEBACKS=0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  claude-office-db:
+    name: claude-office-db

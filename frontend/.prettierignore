@@ -1,0 +1,2 @@
+# Written by `make gen-types` (json2ts); the type-drift check compares it byte for byte.
+src/types/generated.ts

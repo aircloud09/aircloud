@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/* The dark theme follows the class on <html> (utils/theme.ts), not the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --animate-elevator: elevator-lamp 1.6s ease-in-out forwards;
+}
+
+.dark {
+  --background: #0d111a;
+  --foreground: #ededed;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* The floor guide's 「▲ 3F」 lamp while the office changes floors. */
+@keyframes elevator-lamp {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  15%,
+  75% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@layer utilities {
+  /* Custom Scrollbar Theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b; /* slate-800 */
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #f97316; /* orange-500 */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #1e293b transparent;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: #475569; /* slate-600 */
+    background-clip: padding-box;
+  }
+
+  .dark * {
+    scrollbar-color: #475569 transparent;
+  }
+}

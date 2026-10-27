@@ -1,0 +1,43 @@
+{
+  "name": "opencode-claude-office",
+  "version": "0.25.0",
+  "description": "OpenCode plugin that sends lifecycle events to Claude Office Visualizer",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "opencode",
+    "claude-office",
+    "visualizer",
+    "plugin",
+    "ai",
+    "agent"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.19.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.12.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2"
+  }
+}
