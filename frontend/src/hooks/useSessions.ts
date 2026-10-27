@@ -52,6 +52,8 @@ interface UseSessionsResult {
  */
 export function useSessions(
   showStatus: (text: string, type?: "info" | "error" | "success") => void,
+  /** Follow a new session from any project, not only the current one (kiosk). */
+  followAnyProject = false,
 ): UseSessionsResult {
   const [sessionId, setSessionId] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -182,7 +184,8 @@ export function useSessions(
 
   // Auto-follow new sessions in the current project
   useEffect(() => {
-    if (!autoFollowNewSessions || sessions.length === 0) return;
+    if ((!autoFollowNewSessions && !followAnyProject) || sessions.length === 0)
+      return;
 
     // Get current session's project root
     const currentSession = sessions.find((s) => s.id === sessionId);
@@ -197,11 +200,14 @@ export function useSessions(
     knownSessionIds.current = new Set(sessions.map((s) => s.id));
 
     // If no new sessions or no current project context, skip
-    if (newSessions.length === 0 || !currentProjectRoot) return;
+    if (newSessions.length === 0 || (!currentProjectRoot && !followAnyProject))
+      return;
 
     // Find a new active session in the same project
     const newSessionInProject = newSessions.find(
-      (s) => s.projectRoot === currentProjectRoot && s.status === "active",
+      (s) =>
+        (followAnyProject || s.projectRoot === currentProjectRoot) &&
+        s.status === "active",
     );
 
     if (newSessionInProject && newSessionInProject.id !== sessionId) {
@@ -220,7 +226,14 @@ export function useSessions(
         "info",
       );
     }
-  }, [sessions, sessionId, autoFollowNewSessions, showStatus, t]);
+  }, [
+    sessions,
+    sessionId,
+    autoFollowNewSessions,
+    followAnyProject,
+    showStatus,
+    t,
+  ]);
 
   return {
     sessions,

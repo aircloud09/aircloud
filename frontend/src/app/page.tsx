@@ -5,7 +5,13 @@
  * button by 「LIVE」 opens settings.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Building2, Settings, Users } from "lucide-react";
 import { AgentLogo } from "@/components/iso/AgentLogo";
 import { IsoFloorGuide } from "@/components/iso/IsoFloorGuide";
@@ -42,6 +48,11 @@ import { DARK_CLASS } from "@/utils/theme";
 /** How long the 「▲ 3F」 lamp shows while the office changes floors (globals.css). */
 const ELEVATOR_LAMP_MS = 1600;
 
+/** 「?kiosk=1」 shows the office alone: the launcher opens its window this way. */
+const noSubscribe = (): (() => void) => () => undefined;
+const readKiosk = (): boolean =>
+  new URLSearchParams(window.location.search).has("kiosk");
+
 const toolButton =
   "flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200";
 
@@ -49,8 +60,9 @@ export default function IsoOfficePage(): React.ReactNode {
   const { t } = useTranslation();
   // Status toasts are not shown on this page yet.
   const showStatus = useCallback(() => undefined, []);
+  const kiosk = useSyncExternalStore(noSubscribe, readKiosk, () => false);
   const { sessions, sessionsLoading, sessionId, setSessionId, fetchSessions } =
-    useSessions(showStatus);
+    useSessions(showStatus, kiosk);
   const { handleSessionSelect } = useSessionSwitch({
     sessionId,
     setSessionId,
@@ -140,13 +152,15 @@ export default function IsoOfficePage(): React.ReactNode {
           '"Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
       }}
     >
-      <IsoFloorGuide
-        floors={floors}
-        sessionId={sessionId}
-        now={now}
-        onSelectSession={goToSession}
-        className="hidden w-[184px] shrink-0 flex-col gap-2 py-3 pl-3 lg:flex"
-      />
+      {!kiosk && (
+        <IsoFloorGuide
+          floors={floors}
+          sessionId={sessionId}
+          now={now}
+          onSelectSession={goToSession}
+          className="hidden w-[184px] shrink-0 flex-col gap-2 py-3 pl-3 lg:flex"
+        />
+      )}
       {sheet === "guide" && (
         <div
           role="dialog"
@@ -188,7 +202,7 @@ export default function IsoOfficePage(): React.ReactNode {
         )}
 
         {/* An empty office points at the connect tab: nothing is wired up yet. */}
-        {!sessionsLoading && sessions.length === 0 && (
+        {!kiosk && !sessionsLoading && sessions.length === 0 && (
           <div className="absolute left-4 top-4 flex max-w-[min(60%,calc(100%_-_13rem))] items-center gap-3 rounded-xl border border-slate-200/80 bg-white/95 py-2 pl-3 pr-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/90">
             <p className="hidden min-w-0 truncate text-xs text-slate-500 sm:block dark:text-slate-400">
               {t("iso.connect.empty")}
@@ -203,7 +217,7 @@ export default function IsoOfficePage(): React.ReactNode {
           </div>
         )}
 
-        {session && (
+        {!kiosk && session && (
           <header className="absolute left-4 top-4 flex max-w-[min(60%,calc(100%_-_13rem))] items-center gap-3 rounded-xl border border-slate-200/80 bg-white/95 py-2 pl-2 pr-4 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/90">
             <AgentLogo codingAgent={codingAgent ?? session.codingAgent} />
             <div className="min-w-0">
@@ -224,56 +238,60 @@ export default function IsoOfficePage(): React.ReactNode {
           </header>
         )}
 
-        <div className="absolute right-4 top-4 flex items-center gap-1.5">
-          <button
-            type="button"
-            aria-label="floor guide"
-            title={t("iso.floor.title")}
-            onClick={() => setSheet("guide")}
-            className={`${toolButton} lg:hidden`}
-          >
-            <Building2 size={14} />
-          </button>
-          <button
-            type="button"
-            aria-label="people"
-            title={t("iso.panel.people")}
-            onClick={() => setSheet("panel")}
-            className={`${toolButton} lg:hidden`}
-          >
-            <Users size={14} />
-          </button>
-          <button
-            type="button"
-            aria-label="settings"
-            title={t("header.settings")}
-            onClick={() => openSettings("general")}
-            className={toolButton}
-          >
-            <Settings size={14} />
-          </button>
-          <div
-            className={`flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold shadow-sm dark:border-slate-700 dark:bg-slate-900 ${
-              isConnected
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-slate-400"
-            }`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
-            />
-            {/* Phones keep just the dot: the top row is shared with the header. */}
-            <span className="sr-only sm:not-sr-only">
-              {isConnected ? t("iso.live") : t("iso.offline")}
-            </span>
+        {!kiosk && (
+          <div className="absolute right-4 top-4 flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-label="floor guide"
+              title={t("iso.floor.title")}
+              onClick={() => setSheet("guide")}
+              className={`${toolButton} lg:hidden`}
+            >
+              <Building2 size={14} />
+            </button>
+            <button
+              type="button"
+              aria-label="people"
+              title={t("iso.panel.people")}
+              onClick={() => setSheet("panel")}
+              className={`${toolButton} lg:hidden`}
+            >
+              <Users size={14} />
+            </button>
+            <button
+              type="button"
+              aria-label="settings"
+              title={t("header.settings")}
+              onClick={() => openSettings("general")}
+              className={toolButton}
+            >
+              <Settings size={14} />
+            </button>
+            <div
+              className={`flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold shadow-sm dark:border-slate-700 dark:bg-slate-900 ${
+                isConnected
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-slate-400"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
+              />
+              {/* Phones keep just the dot: the top row is shared with the header. */}
+              <span className="sr-only sm:not-sr-only">
+                {isConnected ? t("iso.live") : t("iso.offline")}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
-      <IsoSidePanel
-        session={session}
-        colleagues={colleagues}
-        className="hidden w-[240px] shrink-0 flex-col gap-2 py-3 pr-3 lg:flex"
-      />
+      {!kiosk && (
+        <IsoSidePanel
+          session={session}
+          colleagues={colleagues}
+          className="hidden w-[240px] shrink-0 flex-col gap-2 py-3 pr-3 lg:flex"
+        />
+      )}
       {sheet === "panel" && (
         <div
           role="dialog"
