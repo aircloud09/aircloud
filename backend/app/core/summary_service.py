@@ -71,21 +71,14 @@ class SummaryService:
           authenticating via the user's logged-in Claude subscription.
         - ``openai``: call any OpenAI-compatible ``/chat/completions`` endpoint.
         - ``disabled``: local fallback text only.
-        - ``template``: no model at all; texts are fixed templates filled with
-          what the session already says (the prompt's first line, the Agent
-          tool's ``description``), e.g. 「✅ {prompt} 완료」.
         """
         settings = get_settings()
         self._backend = settings.SUMMARY_BACKEND.strip().lower()
         self.model = settings.SUMMARY_MODEL
         self._cli_path = settings.SUMMARY_CLI_PATH
         self._semaphore = asyncio.Semaphore(max(1, settings.SUMMARY_CONCURRENCY))
-        self.template = self._backend == "template"
 
-        if self.template:
-            self.enabled = False
-            logger.info("Summary service in template mode - no model calls")
-        elif not settings.SUMMARY_ENABLED or self._backend == "disabled":
+        if not settings.SUMMARY_ENABLED or self._backend == "disabled":
             self.enabled = False
             reason = (
                 "SUMMARY_ENABLED=False"
@@ -116,21 +109,8 @@ class SummaryService:
             else:
                 logger.info(f"claude CLI '{self._cli_path}' not found - using fallback summaries")
 
-    @staticmethod
-    def first_line(text: str | None, max_len: int) -> str:
-        """First non-empty line of *text*, whitespace collapsed, cut to *max_len*."""
-        line = next((ln for ln in (text or "").splitlines() if ln.strip()), "")
-        line = " ".join(line.split())
-        return line if len(line) <= max_len else line[: max_len - 1].rstrip() + "…"
-
-    def template_done(self, task: str | None) -> str:
-        """「✅ {task} 완료」, or 「✅ 완료」 without a task."""
-        return f"✅ {task} 완료" if task else "✅ 완료"
-
     async def summarize_agent_task(self, task_description: str) -> str:
         """Generate a short summary of a subagent's task."""
-        if self.template:
-            return self.first_line(task_description, 40)
         fallback = self._extract_first_sentence(task_description, max_len=50)
 
         if not self.enabled:
@@ -149,8 +129,6 @@ class SummaryService:
         """Generate a summary of the user's prompt for marquee display."""
         if not prompt:
             return ""
-        if self.template:
-            return self.first_line(prompt, 60)
 
         # Normalize newlines and collapse to single line
         prompt_stripped = " ".join(prompt.split())
@@ -182,9 +160,6 @@ class SummaryService:
         agent_type: str | None = None,
     ) -> str:
         """Generate a fun, creative nickname for an agent based on its task."""
-        if self.template:
-            name = self.first_line(description, 30) or agent_type or "Agent"
-            return self.dedupe_name(name, existing_names)
         fallback = self.generate_agent_name_fallback(description, existing_names, agent_type)
 
         # If the name came from an explicit, curated agent_type mapping, keep it

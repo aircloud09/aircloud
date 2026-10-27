@@ -218,18 +218,14 @@ async def handle_subagent_stop(
     if poller:
         await poller.stop_polling(resolved_agent_id)
 
-    if get_summary_service().template:
-        # 「✅ {description} 완료」 needs no transcript.
-        await set_agent_speech(sm, resolved_agent_id, "")
-    else:
-        spoke = await extract_and_set_agent_speech(
-            sm, resolved_agent_id, event.data.agent_transcript_path
-        )
-        # Producers whose transcript the backend cannot read (Codex CLI) send the
-        # subagent's last reply itself as its speech.
-        reply = event.data.speech_content.agent if event.data.speech_content else None
-        if not spoke and reply:
-            await set_agent_speech(sm, resolved_agent_id, reply)
+    spoke = await extract_and_set_agent_speech(
+        sm, resolved_agent_id, event.data.agent_transcript_path
+    )
+    # Producers whose transcript the backend cannot read (Codex CLI) send the
+    # subagent's last reply itself as its speech.
+    reply = event.data.speech_content.agent if event.data.speech_content else None
+    if not spoke and reply:
+        await set_agent_speech(sm, resolved_agent_id, reply)
 
     await broadcast_state(event.session_id, sm)
 
@@ -280,9 +276,6 @@ async def enrich_agent_with_summaries(
         event_data.agent_name or event_data.task_description or event_data.agent_type or ""
     )
     task_source = event_data.task_description or event_data.agent_name or ""
-    if summary_service.template:
-        # The Agent tool's short description, not the long prompt it carries.
-        task_source = event_data.agent_name or task_source
 
     if name_source:
         agent.name = await summary_service.generate_agent_name(
@@ -380,11 +373,7 @@ async def set_agent_speech(sm: StateMachine, agent_id: str, response: str) -> bo
         return False
 
     summary_service = get_summary_service()
-    if summary_service.template:
-        agent = sm.agents[agent_id]
-        summary = summary_service.template_done(agent.current_task or agent.name)
-    else:
-        summary = await summary_service.summarize_response(response)
+    summary = await summary_service.summarize_response(response)
 
     if not summary:
         return False

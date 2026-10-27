@@ -23,34 +23,6 @@ HOOK_TYPES = [
 ]
 
 
-# Substrings that mark a settings entry as ours: the event hook (bare name or
-# absolute path, with or without .exe), the old .sh wrappers, and the
-# launcher that starts the office on SessionStart.
-OUR_MARKERS = ("claude-office-hook", "claude-office/hooks/", "agent_office.py")
-
-
-def quote_cmd(path: str) -> str:
-    """Quote an executable path that contains whitespace.
-
-    Hook commands run through a shell (Git Bash on Windows), so an absolute
-    path such as ``C:/Users/Jane Doe/.local/bin/claude-office-hook.exe`` must
-    be quoted to stay one word.
-    """
-    return f'"{path}"' if any(c.isspace() for c in path) else path
-
-
-def entry_command(entry: dict[str, Any]) -> str:
-    """Return the first hook command of a settings entry, or ``""``."""
-    try:
-        return entry.get("hooks", [])[0].get("command", "") or ""
-    except (IndexError, AttributeError):
-        return ""
-
-
-def is_ours(entry: dict[str, Any]) -> bool:
-    return any(marker in entry_command(entry) for marker in OUR_MARKERS)
-
-
 def get_settings_path() -> Path:
     """Get the path to the Claude settings file."""
     # Priority: Env var -> ~/.claude/settings.json
@@ -113,7 +85,7 @@ def create_hook_config(hook_cmd: str, hook_type: str) -> dict[str, Any]:
 
     config = {
         "type": "command",
-        "command": f"{quote_cmd(hook_cmd)} {event_type}",
+        "command": f"{hook_cmd} {event_type}",
         "timeout": 2,  # Seconds
     }
 
@@ -154,50 +126,12 @@ def is_same_hook(entry1: dict[str, Any], entry2: dict[str, Any]) -> bool:
         return False
 
 
-def create_launcher_config(launcher_cmd: str) -> dict[str, Any]:
-    """SessionStart entry that starts the office server if it is down.
-
-    The command hands the work to a detached process and returns at once, so
-    the short timeout only guards against a broken interpreter path.
-    """
-    return {"hooks": [{"type": "command", "command": launcher_cmd, "timeout": 5}]}
-
-
-def _merge_entry(
-    hooks_config: dict[str, Any], hook_type: str, new_entry: dict[str, Any], marker: str
-) -> bool:
-    """Add *new_entry* under *hook_type*, replacing our stale copies of it.
-
-    Entries whose command contains *marker* but differ from *new_entry* (for
-    example the bare ``claude-office-hook`` an older install wrote) are
-    dropped; everything else the user has is kept as is. Returns True when
-    the list changed.
-    """
-    current_list = hooks_config.get(hook_type, [])
-    if any(is_same_hook(existing, new_entry) for existing in current_list):
-        print(f"  [Skip] {hook_type}: Hook already exists.")
-        return False
-
-    kept: list[Any] = []
-    for existing in current_list:
-        cmd = entry_command(existing)
-        if marker in cmd:
-            print(f"  [Replace] {hook_type}: {cmd}")
-            continue
-        kept.append(existing)
-    print(f"  [Add]  {hook_type}: {entry_command(new_entry)}")
-    kept.append(new_entry)
-    hooks_config[hook_type] = kept
-    return True
-
-
-def install_hooks(hook_cmd: str, dry_run: bool = False, launcher_cmd: str | None = None):
+def install_hooks(hook_cmd: str, dry_run: bool = False):
     """Install hooks into settings.
 
     Args:
         hook_cmd: Path to the claude-office-hook command
         dry_run: If True, don't actually save changes
-        launcher_cmd: Full SessionStart command that starts the office (optional)
     """
     settings_path = get_settings_path()
     print(f"Installing hooks to {settings_path}...")
@@ -209,12 +143,18 @@ def install_hooks(hook_cmd: str, dry_run: bool = False, launcher_cmd: str | None
 
     for hook_type in HOOK_TYPES:
         new_entry = create_hook_config(hook_cmd, hook_type)
-        if _merge_entry(hooks_config, hook_type, new_entry, "claude-office-hook"):
-            changes_made = True
+        event_type = convert_camel_to_snake(hook_type)
 
-    if launcher_cmd and _merge_entry(
-        hooks_config, "SessionStart", create_launcher_config(launcher_cmd), "agent_office.py"
-    ):
+        current_list = hooks_config.get(hook_type, [])
+
+        # Check for duplicates
+        if any(is_same_hook(existing, new_entry) for existing in current_list):
+            print(f"  [Skip] {hook_type}: Hook already exists.")
+            continue
+
+        print(f"  [Add]  {hook_type}: {hook_cmd} {event_type}")
+        current_list.append(new_entry)
+        hooks_config[hook_type] = current_list
         changes_made = True
 
     if changes_made:
@@ -248,13 +188,17 @@ def uninstall_hooks(_hook_cmd: str, dry_run: bool = False) -> None:
         current_list = hooks_config[hook_type]
         original_len = len(current_list)
 
-        # Filter out hooks that use our command (event hook, old .sh wrappers,
-        # and the office launcher)
+        # Filter out hooks that use our command (both new direct and old .sh wrappers)
         new_list: list[Any] = []
         for entry in current_list:
-            if is_ours(entry):
-                print(f"  [Remove] {hook_type}: {entry_command(entry)}")
-                continue
+            try:
+                cmd = entry.get("hooks", [])[0].get("command", "")
+                # Match both "claude-office-hook" (new) and "claude-office/hooks/*.sh" (old)
+                if "claude-office-hook" in cmd or "claude-office/hooks/" in cmd:
+                    print(f"  [Remove] {hook_type}: {cmd}")
+                    continue
+            except (IndexError, AttributeError):
+                pass
             new_list.append(entry)
 
         if len(new_list) < original_len:
@@ -288,15 +232,11 @@ def main():
     parser.add_argument("action", choices=["install", "uninstall"], help="Action to perform")
     parser.add_argument("--dry-run", action="store_true", help="Don't save changes")
     parser.add_argument("--hook-cmd", help="Path to claude-office-hook command", required=True)
-    parser.add_argument(
-        "--launcher-cmd",
-        help="Full SessionStart command that starts the office server when it is down",
-    )
 
     args = parser.parse_args()
 
     if args.action == "install":
-        install_hooks(args.hook_cmd, args.dry_run, args.launcher_cmd)
+        install_hooks(args.hook_cmd, args.dry_run)
     elif args.action == "uninstall":
         uninstall_hooks(args.hook_cmd, args.dry_run)
 

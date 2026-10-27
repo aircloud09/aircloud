@@ -25,6 +25,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hook_settings  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
@@ -187,17 +190,16 @@ def install(skip_build: bool) -> None:
     print(f"  wrote {CONFIG_ENV}")
     update_env_file(
         BACKEND / ".env",
-        {"SUMMARY_ENABLED": "false", "SUMMARY_BACKEND": "template", "CLAUDE_CODE_OAUTH_TOKEN": ""},
+        {"SUMMARY_ENABLED": "false", "SUMMARY_BACKEND": "disabled", "CLAUDE_CODE_OAUTH_TOKEN": ""},
         keep_existing=set(),
     )
-    print(f"  wrote {BACKEND / '.env'} (template texts, no model calls)")
+    print(f"  wrote {BACKEND / '.env'} (summaries / agent names: no model calls)")
 
     step("Claude Code hooks: merge into settings.json")
     # "|| exit 0": even a missing interpreter must not fail the session
     # (valid in both Git Bash and cmd).
     launcher_cmd = f"{fwd(launcher_python())} {fwd(LAUNCHER)} hook || exit 0"
-    run([sys.executable, str(HOOKS / "manage_hooks.py"), "install",
-         "--hook-cmd", exe.absolute().as_posix(), "--launcher-cmd", launcher_cmd])
+    hook_settings.install(exe.absolute().as_posix(), launcher_cmd)
 
     print("\nDone. Restart Claude Code (CLI and desktop app) so it reloads the hooks.")
     print("The next session opens the office window if the server is not running.")
@@ -209,8 +211,7 @@ def uninstall() -> None:
     if py.exists():
         subprocess.run([str(py), str(LAUNCHER), "stop"])
     step("Removing our hooks from settings.json (others are kept)")
-    run([sys.executable, str(HOOKS / "manage_hooks.py"), "uninstall",
-         "--hook-cmd", "claude-office-hook"])
+    hook_settings.uninstall()
     uv = find_uv()
     if uv:
         subprocess.run([uv, "tool", "uninstall", "claude-office-hooks"])

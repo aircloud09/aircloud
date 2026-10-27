@@ -40,7 +40,7 @@ BACKEND_PORT = 8000  # the frontend talks to <page host>:8000 (frontend/src/util
 FRONTEND_PORT = 4747
 BACKEND_HEALTH = f"http://{HOST}:{BACKEND_PORT}/health"
 FRONTEND_URL = f"http://{HOST}:{FRONTEND_PORT}/"
-OFFICE_URL = f"{FRONTEND_URL}?kiosk=1"
+OFFICE_URL = FRONTEND_URL
 
 STATE_DIR = Path(os.environ.get("AGENT_OFFICE_HOME") or Path.home() / ".agent-office")
 RUN_DIR = STATE_DIR / "run"
@@ -229,7 +229,7 @@ def server_env() -> dict[str, str]:
         {
             # The default summary/agent-name backend runs `claude -p` (account usage).
             "SUMMARY_ENABLED": "false",
-            "SUMMARY_BACKEND": "template",  # fixed texts, no model (summary_service.py)
+            "SUMMARY_BACKEND": "disabled",
             "CLAUDE_CODE_OAUTH_TOKEN": "",
             "PYTHONUNBUFFERED": "1",
             "PYTHONIOENCODING": "utf-8",
