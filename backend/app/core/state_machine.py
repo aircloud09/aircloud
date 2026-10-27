@@ -367,11 +367,15 @@ def _handle_stop(sm: "StateMachine", event: AnyEvent) -> None:
     sm.sync_activity("main")
     sm.set_stuck("main", None)
 
-    speech_text = (
-        event.data.speech_content.boss_phone
-        if event.data.speech_content and event.data.speech_content.boss_phone
-        else get_random_job_completion_quote()
-    )
+    summary_service = get_summary_service()
+    if event.data.speech_content and event.data.speech_content.boss_phone:
+        speech_text = event.data.speech_content.boss_phone
+    elif summary_service.template:
+        speech_text = summary_service.template_done(
+            summary_service.first_line(sm.boss_current_task, 60) or None
+        )
+    else:
+        speech_text = get_random_job_completion_quote()
     sm.boss_bubble = BubbleContent(
         type=BubbleType.SPEECH,
         text=speech_text,
@@ -722,11 +726,17 @@ class StateMachine:
         name_source = data.agent_name or data.task_description or ""
         summary_service = get_summary_service()
         existing_names = {a.name for a in self.agents.values() if a.name}
-        short_name = summary_service.generate_agent_name_fallback(
-            name_source, existing_names, agent_type=data.agent_type
-        )
-
         task = data.task_description or data.agent_name or None
+        if summary_service.template:
+            short_name = summary_service.dedupe_name(
+                summary_service.first_line(name_source, 30) or data.agent_type or "Agent",
+                existing_names,
+            )
+            task = summary_service.first_line(data.agent_name or task, 40) or None
+        else:
+            short_name = summary_service.generate_agent_name_fallback(
+                name_source, existing_names, agent_type=data.agent_type
+            )
 
         return Agent(
             id=agent_id,

@@ -5,6 +5,9 @@ import os
 # Disable AI summary service in tests to avoid network timeouts
 # when CLAUDE_CODE_OAUTH_TOKEN is present in .env but expired.
 os.environ["SUMMARY_ENABLED"] = "False"
+# Tests expect the fallback texts, whatever backend a local .env picks
+# (launcher/install.py writes SUMMARY_BACKEND=template there).
+os.environ["SUMMARY_BACKEND"] = "disabled"
 
 import asyncio
 import tempfile

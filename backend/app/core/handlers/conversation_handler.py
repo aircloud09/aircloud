@@ -60,6 +60,12 @@ async def handle_stop(sm: StateMachine, event: LifecycleEvent) -> None:
         f"{sm.boss_bubble.text[:50] if sm.boss_bubble else 'None'}..."
     )
 
+    if get_summary_service().template:
+        # 「✅ {prompt} 완료」 needs no transcript.
+        await set_boss_speech(sm, "")
+        await broadcast_state(event.session_id, sm)
+        return
+
     full_response = await extract_and_set_boss_speech(sm, event.data.transcript_path)
     # Producers whose transcript the backend cannot read (Gemini CLI) send the
     # reply itself as the boss's speech.
@@ -114,7 +120,10 @@ async def set_boss_speech(sm: StateMachine, response: str) -> str:
         The full response text.
     """
     summary_service = get_summary_service()
-    summary = await summary_service.summarize_response(response)
+    if summary_service.template:
+        summary = summary_service.template_done(sm.boss_current_task)
+    else:
+        summary = await summary_service.summarize_response(response)
 
     if summary:
         sm.boss_bubble = BubbleContent(

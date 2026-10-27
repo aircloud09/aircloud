@@ -49,7 +49,15 @@ Claude Code 세션 시작 (CLI 또는 데스크톱 앱 Code 탭)
 ```
 
 - 첫 세션의 `session_start`는 서버가 뜨기 전에 보내져 유실되지만, 백엔드가 다음 이벤트에서 세션을 자동 복구한다(테스트로 확인).
-- 토큰 0: 런처가 백엔드를 `SUMMARY_ENABLED=false`, `SUMMARY_BACKEND=disabled`, `CLAUDE_CODE_OAUTH_TOKEN=`(빈 값)로 실행하고, `ANTHROPIC_*` 환경변수는 넘기지 않는다. `install`이 `backend/.env`에도 같은 값을 쓴다. 기본값이었던 `claude-cli` 요약 기능은 `claude -p`를 실행해 토큰을 썼다.
+- 토큰 0: 런처가 백엔드를 `SUMMARY_BACKEND=template`, `SUMMARY_ENABLED=false`, `CLAUDE_CODE_OAUTH_TOKEN=`(빈 값)로 실행하고, `ANTHROPIC_*` 환경변수는 넘기지 않는다. `install`이 `backend/.env`에도 같은 값을 쓴다. 원본 기본값(`claude-cli`)은 말풍선·이름을 만들 때마다 `claude -p`(Haiku)를 따로 실행해 계정 사용량을 썼다.
+- 템플릿 모드(`backend/app/core/summary_service.py`의 `template`)는 모델 없이 세션에 이미 있는 값을 끼워 넣는다.
+
+  | 항목 | 문구 |
+  |---|---|
+  | 내 질문 | `{질문 첫 줄, 최대 60자}` |
+  | 답변 끝 (보스 말풍선) | `✅ {질문 첫 줄} 완료` |
+  | 서브에이전트 이름/라벨 | `{Agent 도구의 description}` → 화면에는 `Explore · 인증 코드 찾기` |
+  | 서브에이전트 끝 | `✅ {description} 완료` |
 - `127.0.0.1` 사용: Windows에서 `localhost`는 `::1`을 먼저 시도해 hook이 느려질 수 있어서다. 프론트 빌드에 `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000`을 넣는다.
 
 ## 3. 설치 (Windows)
@@ -109,11 +117,12 @@ hook은 settings.json에 등록된 명령을 Claude Code와 같은 방식(셸 + 
 | 이어서 세션 6개 추가 시작 (2라운드) | 창 추가 없음, 로그 `office already running` |
 | hook 소요 시간 | 런처 hook ~0.06초, claude-office-hook ~0.1초, 모두 exit 0 |
 | 인터프리터가 없는 경우 | `\|\| exit 0`으로 exit 0 |
+| 템플릿 문구 (prompt → Agent 서브에이전트 → Stop) | 보스 `✅ README.md 읽고 요약해줘 완료`, 서브에이전트 `인증 코드 찾기` → `✅ 인증 코드 찾기 완료`, 모델 호출 없음 |
 | 작업 이벤트 (prompt → Read/Bash/Edit → Stop) | WebSocket으로 `working ↔ idle → completing` 수신. 스크린샷에서 캐릭터가 이동하고, 끝나면 라운지 소파로 감 |
 | kiosk 화면 | 사이드패널·헤더·툴바 없음 (줌 버튼만 남음) |
 | `stop` | 백엔드·프론트·창 프로세스 종료, 포트 해제 |
 | `install` 재실행 / `uninstall` | 재실행 시 13개 모두 Skip(중복 없음). 제거 후 사용자 hook과 설정이 원본과 동일 |
-| 기존 테스트 | hooks pytest 114 통과, frontend vitest 309 통과, tsc/eslint 통과 |
+| 기존 테스트 | backend pytest 523 통과(템플릿 테스트 포함), hooks pytest 114 통과, frontend vitest 309 통과, tsc/eslint 통과 |
 
 재현 방법: `launcher/e2e/`의 `fire_hooks.py`(hook 호출), `fakebin/chrome`(창 기록), `watch_office.js`(Playwright 관찰).
 
@@ -129,4 +138,4 @@ hook은 settings.json에 등록된 명령을 Claude Code와 같은 방식(셸 + 
 - [ ] 포트 8000/4747은 고정이다. 다른 프로그램이 점유하면 시작에 실패하고 `logs/backend.log`·`frontend.log`에 기록된다.
 - [ ] `git pull`로 프론트가 바뀌면 `install.cmd`를 다시 실행해 빌드한다. `--skip-build`는 기존 빌드를 재사용한다.
 - [ ] 서버가 꺼져 있는 동안 claude-office-hook 이벤트는 버려진다(전송 timeout 0.5초, 무해).
-- [ ] 원본 포크를 업데이트하려면 upstream을 받아 이 레포에 병합한다. 수정 지점은 `frontend/src/app/page.tsx`, `frontend/src/hooks/useSessions.ts`, `hooks/manage_hooks.py` 세 파일이다.
+- [ ] 원본 포크를 업데이트하려면 upstream을 받아 이 레포에 병합한다. 수정 지점: `frontend/src/app/page.tsx`, `frontend/src/hooks/useSessions.ts`, `hooks/manage_hooks.py`, 템플릿 모드(`backend/app/core/summary_service.py`, `handlers/agent_handler.py`, `handlers/conversation_handler.py`, `state_machine.py`의 `_handle_stop`, `tests/conftest.py`).

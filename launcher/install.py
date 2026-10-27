@@ -187,10 +187,10 @@ def install(skip_build: bool) -> None:
     print(f"  wrote {CONFIG_ENV}")
     update_env_file(
         BACKEND / ".env",
-        {"SUMMARY_ENABLED": "false", "SUMMARY_BACKEND": "disabled", "CLAUDE_CODE_OAUTH_TOKEN": ""},
+        {"SUMMARY_ENABLED": "false", "SUMMARY_BACKEND": "template", "CLAUDE_CODE_OAUTH_TOKEN": ""},
         keep_existing=set(),
     )
-    print(f"  wrote {BACKEND / '.env'} (summaries / agent-name generation off)")
+    print(f"  wrote {BACKEND / '.env'} (template texts, no model calls)")
 
     step("Claude Code hooks: merge into settings.json")
     # "|| exit 0": even a missing interpreter must not fail the session

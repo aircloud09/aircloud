@@ -227,9 +227,9 @@ def server_env() -> dict[str, str]:
     }
     env.update(
         {
-            # The summary/agent-name service would run `claude -p` (tokens).
+            # The default summary/agent-name backend runs `claude -p` (account usage).
             "SUMMARY_ENABLED": "false",
-            "SUMMARY_BACKEND": "disabled",
+            "SUMMARY_BACKEND": "template",  # fixed texts, no model (summary_service.py)
             "CLAUDE_CODE_OAUTH_TOKEN": "",
             "PYTHONUNBUFFERED": "1",
             "PYTHONIOENCODING": "utf-8",
