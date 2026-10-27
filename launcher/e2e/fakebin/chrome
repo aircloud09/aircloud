@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stand-in for chrome.exe: records each window it is asked to open and stays alive like a window.
+echo "$(date +%T.%N) $*" >> "$(dirname "$0")/../opens.log"
+sleep 3600; :
