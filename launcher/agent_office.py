@@ -62,7 +62,6 @@ CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 EXPECTED_NAMES = {
     "backend": ("python",),
     "frontend": ("python",),
-    "browser": ("chrome", "msedge", "chromium", "edge"),
 }
 
 
@@ -146,6 +145,7 @@ def process_name(pid: int) -> str:
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
                 capture_output=True,
                 text=True,
+                errors="replace",
                 creationflags=CREATE_NO_WINDOW,
                 timeout=10,
             ).stdout
@@ -322,7 +322,34 @@ def find_browser() -> Path | None:
     return next((c for c in candidates if c.is_file()), None)
 
 
+def office_window_pids() -> list[int]:
+    """Pids of the browser processes running the office profile, i.e. its open windows.
+
+    A second launch on the same profile hands its window to the first process
+    and exits, so a pid file would point at a dead process.
+    """
+    try:
+        if IS_WINDOWS:
+            script = ("Get-CimInstance Win32_Process"
+                      " | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:AO_PROFILE) }"
+                      " | ForEach-Object { $_.ProcessId }")
+            out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                                 capture_output=True, text=True, errors="replace",
+                                 creationflags=CREATE_NO_WINDOW,
+                                 env={**os.environ, "AO_PROFILE": str(PROFILE_DIR)},
+                                 timeout=30).stdout
+        else:
+            out = subprocess.run(["pgrep", "-f", str(PROFILE_DIR)], capture_output=True, text=True,
+                                 timeout=10).stdout
+        return [int(p) for p in out.split() if p.isdigit()]
+    except Exception:
+        return []
+
+
 def open_window() -> None:
+    if office_window_pids():
+        log("office window already open")
+        return
     browser = find_browser()
     if browser is None:
         log(f"no Chrome/Edge found; opening {OFFICE_URL} in the default browser")
@@ -339,7 +366,6 @@ def open_window() -> None:
         "--window-size=1280,820",
     ]
     proc = spawn_detached(cmd, log_name="browser", console=False)
-    write_pid("browser", proc.pid)
     log(f"opened office window with {browser.name} (pid {proc.pid})")
 
 
@@ -396,10 +422,17 @@ def cmd_ensure(force_open: bool) -> int:
                 open_window()
             return 0
 
-        if need_backend:
-            start_backend()
-        if need_frontend:
-            start_frontend()
+        # A busy server can miss the 1s health check; a second copy would only
+        # fail on the taken port, so wait for the one already listening.
+        for name, port, needed, start in (("backend", BACKEND_PORT, need_backend, start_backend),
+                                          ("frontend", FRONTEND_PORT, need_frontend,
+                                           start_frontend)):
+            if not needed:
+                continue
+            if _port_owner(port):
+                log(f"ensure: {name} port :{port} is taken; waiting for it to answer")
+            else:
+                start()
 
         deadline = time.monotonic() + READY_TIMEOUT
         while time.monotonic() < deadline:
@@ -450,8 +483,11 @@ def _port_owner(port: int) -> int:
     """Pid listening on *port* on loopback, or 0."""
     try:
         if IS_WINDOWS:
+            # errors="replace": netstat prints the OEM code page (cp949 here), not
+            # UTF-8, and only the ASCII columns are read.
             out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
-                                 creationflags=CREATE_NO_WINDOW, timeout=15).stdout
+                                 errors="replace", creationflags=CREATE_NO_WINDOW,
+                                 timeout=15).stdout
             for line in out.splitlines():
                 parts = line.split()
                 if len(parts) >= 5 and parts[3] == "LISTENING" and parts[1].endswith(f":{port}"):
@@ -468,7 +504,14 @@ def _port_owner(port: int) -> int:
 
 
 def cmd_stop() -> int:
-    for name in ("browser", "frontend", "backend"):
+    for pid in office_window_pids():
+        if pid_alive(pid):
+            _kill_tree(pid)
+            log(f"stopped browser (pid {pid})")
+    with contextlib.suppress(FileNotFoundError):
+        (RUN_DIR / "browser.pid").unlink()  # written by older versions
+
+    for name in ("frontend", "backend"):
         pid = read_pid(name)
         if pid and pid_alive(pid):
             pname = process_name(pid)

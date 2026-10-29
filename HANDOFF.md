@@ -81,7 +81,7 @@ cd aircloud
 | 동작 | 방법 |
 |---|---|
 | 자동 실행 | Claude Code 세션 시작 (서버가 꺼져 있을 때만 켜고 창 1번) |
-| 수동 실행 + 창 열기 | `office-start.cmd` (이미 켜져 있어도 창을 연다. 창을 닫은 뒤 다시 볼 때 사용) |
+| 수동 실행 + 창 열기 | `office-start.cmd` (서버가 켜져 있어도 창이 없으면 연다. 창이 이미 있으면 새로 열지 않는다) |
 | 종료 (서버 2개 + 사무실 창) | `office-stop.cmd` |
 | 상태 | `office-status.cmd` |
 | 로그 | `%USERPROFILE%\.agent-office\logs\` (launcher / backend / frontend / browser) |
