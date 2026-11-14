@@ -1,7 +1,7 @@
 // 게임 C: 논쟁 배틀 (실시간)
-// 손가락을 끌어 불덩이를 피하면서, 정답 구슬이 도착할 때 그 줄에 서서 받아친다.
-import { T, engine, Actor, makeSky, addLights, glowMat, textSprite, CONFETTI, sfx, ease, disposeScene } from './engine.js';
-import { QRun, store, stepSlots, HARD_LEVEL } from './core.js';
+// 손가락을 끌어 불덩이를 피한다. 잠깐 버티면 게임이 멈추고 문제가 나오며, 맞히면 반격한다.
+import { T, engine, Actor, makeSky, addLights, glowMat, CONFETTI, sfx, ease, disposeScene } from './engine.js';
+import { store } from './core.js';
 import { hexIsland, makeClouds, place } from './scenery.js';
 
 const FOES = {
@@ -48,6 +48,7 @@ export function createBattle({ session, hud, onEnd }) {
   const FW = 2.3;                 // 움직일 수 있는 가로 반폭
   const PZ = 3.4, EZ = -6.2;      // 플레이어 / 상대의 z 위치
   const rnd = (a, b) => a + Math.random() * (b - a);
+  const GOD = new URLSearchParams(location.search).has('god'); // 테스트용: 불덩이 무시
 
   const hero = new Actor(store.d.opts.char);
   hero.root.scale.setScalar(0.9);
@@ -60,7 +61,7 @@ export function createBattle({ session, hud, onEnd }) {
 
   // 상태
   let lives = 4, wins = 0, over = false, ended = false, t = 0;
-  let run = null, step = null, wave = null, nextQ = 2.2;
+  let nextQ = 7, quizzing = false;
   let px = 0, tx = 0, invuln = 0, fireT = 2, keyDir = 0;
   const balls = [];
   hud.setHearts(lives, 4); hud.setScore(0); hud.setExtra('격파 0');
@@ -77,8 +78,7 @@ export function createBattle({ session, hud, onEnd }) {
   const ballMat = glowMat(0xff8a2a, 2.0);
   const markGeo = new T.RingGeometry(0.42, 0.55, 24);
   const markMat = new T.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.7, depthWrite: false });
-  const orbGeo = new T.IcosahedronGeometry(0.5, 1);
-  const stripGeo = new T.PlaneGeometry(1, 1);
+  const orbGeo = new T.IcosahedronGeometry(0.4, 1);
 
   async function spawnFoe() {
     const name = foeOrder[foeIdx++ % foeOrder.length];
@@ -121,92 +121,36 @@ export function createBattle({ session, hud, onEnd }) {
     engine.particles.emit(pos, 24, { colors: ['#ff5d6c', '#ffb040', '#fff'], speed: 5, up: 4, life: 0.7 });
     if (lives <= 0) {
       over = true;
-      hero.once('Death_A', null); sfx.play('lose'); hud.clearQuestion(); clearWave();
+      hero.once('Death_A', null); sfx.play('lose');
       engine.wait(2.2, finish);
     }
   }
 
-  // ---------- 정답 구슬 ----------
-  function readTime(first) {
-    let chars = (step.sub || '').length;
-    if (first || step.passage) chars += step.prompt.length;
-    if (first && step.passage) chars += step.passage.length;
-    if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
-    return Math.max(first ? 3.8 : 2.8, Math.min(13, (first ? 2.8 : 2.0) + chars * 0.075));
-  }
-  function startStep(first, quick = false) {
-    step = run.step;
-    const sl = stepSlots(step);
-    const colW = Math.min(1.5, (FW * 2) / sl.n);
-    const g = new T.Group();
-    const orbs = [];
-    sl.opts.forEach((o, i) => {
-      const x = (i - (sl.n - 1) / 2) * colW;
-      if (!o) return;
-      const strip = new T.Mesh(stripGeo, new T.MeshBasicMaterial({ color: sl.colors[i], transparent: true, opacity: 0.3, depthWrite: false }));
-      strip.rotation.x = -Math.PI / 2; strip.scale.set(colW * 0.9, PZ - EZ - 1, 1); strip.position.set(x, 0.04, (PZ + EZ + 1) / 2);
-      scene.add(strip);
-      const orb = new T.Group();
-      orb.add(new T.Mesh(orbGeo, glowMat(sl.colors[i], 1.15)));
-      const sp = textSprite(sl.labels[i], { w: 256, h: 256, size: sl.short ? [0, 120, 110, 76, 56][sl.labels[i].length] || 56 : 170, color: '#fff', stroke: 'rgba(0,0,0,.4)', scale: 0.95 });
-      sp.position.set(0, 0.25, 0.55); sp.renderOrder = 5; orb.add(sp);
-      orb.position.set(x, 1.0, EZ + 1.4);
-      scene.add(orb);
-      orbs.push({ orb, strip, x, opt: o, slot: i, color: sl.colors[i] });
+  // ---------- 문제 ----------
+  // 게임을 멈추고 문제를 낸다. 맞히면 반격 구슬이 상대에게 날아간다.
+  function askQuestion() {
+    quizzing = true;
+    engine.paused = true;
+    dragging = false; keyDir = 0;
+    const q = session.next();
+    hud.quiz(q, (ok) => {
+      engine.paused = false; quizzing = false;
+      session.record(q, ok);
+      hud.setScore(session.correct);
+      nextQ = rnd(6, 9);
+      const pos = new T.Vector3(px, 1.2, PZ);
+      if (ok) {
+        hud.flash(true);
+        hero.once('1H_Melee_Attack_Slice_Horizontal', 'Idle', { speed: 1.8, fade: 0.05 });
+        engine.particles.emit(pos, 30, { colors: CONFETTI, speed: 4, up: 4, life: 0.8 });
+        const orb = new T.Mesh(orbGeo, glowMat(0x35d07f, 1.6));
+        scene.add(orb);
+        const to = new T.Vector3(foe ? foe.a.root.position.x : 0, 1.4, EZ);
+        // 여러 번 골라야 하는 문제는 2칸
+        const dmg = q.type === 'ox' || q.type === 'choice' ? 1 : 2;
+        engine.tween(0.4, (k) => { orb.position.lerpVectors(pos, to, k); orb.position.y += Math.sin(k * Math.PI) * 1.4; }, { ease: ease.lin, done: () => { scene.remove(orb); strikeFoe(dmg); } });
+      } else hurt(pos);
     });
-    const time = quick ? 4 : readTime(first);
-    wave = { orbs, colW, z: EZ + 1.4, z0: EZ + 1.4, speed: (PZ - (EZ + 1.4)) / time, sl };
-    const hint = '불덩이를 피하면서, 정답 구슬이 올 때 그 줄에 서세요';
-    hud.showQuestion(run.q, step, { opts: true, hint });
-    if (foe) foe.a.once('Spellcast_Raise', 'Idle', { speed: 1.8 });
-    sfx.play('gate');
-  }
-  function clearWave() {
-    if (!wave) return;
-    for (const o of wave.orbs) { scene.remove(o.orb); scene.remove(o.strip); disposeScene(o.orb); o.strip.material.dispose(); }
-    wave = null;
-  }
-  function resolveWave() {
-    const w = wave;
-    let best = null, bd = 1e9;
-    for (const o of w.orbs) { const d = Math.abs(o.x - px); if (d < bd) { bd = d; best = o; } }
-    const chosen = best && bd <= w.colW * 0.55 ? best : null;
-    const wasWho = step.isWho;
-    const res = run.answer(chosen ? chosen.opt : null);
-    // 문제의 마지막 단계까지 모두 맞혀야 상대 체력이 깎인다(여러 단계 문제는 2칸)
-    const dmg = res.ok && res.done && run.allOk ? (run.steps.length > 1 ? 2 : 1) : 0;
-    const cs = w.sl.opts.findIndex((o) => o && o.correct);
-    hud.markOption(cs, 'right');
-    wave = null;
-    const pos = new T.Vector3(px, 1.2, PZ);
-    for (const o of w.orbs) {
-      scene.remove(o.strip); o.strip.material.dispose();
-      if (o === chosen && res.ok) {
-        // 받아쳐서 상대에게 날린다
-        const from = o.orb.position.clone(), to = new T.Vector3(foe ? foe.a.root.position.x : 0, 1.4, EZ);
-        engine.tween(0.32, (k) => { o.orb.position.lerpVectors(from, to, k); o.orb.position.y += Math.sin(k * Math.PI) * 1.2; }, { ease: ease.lin, done: () => { scene.remove(o.orb); disposeScene(o.orb); strikeFoe(dmg); } });
-      } else {
-        const keep = !res.ok && o.slot === cs;   // 틀렸을 때 정답 구슬을 잠깐 보여 준다
-        const s0 = o.orb.scale.x;
-        engine.tween(0.25, (k) => o.orb.scale.setScalar(s0 * (1 - k)), { delay: keep ? 0.9 : 0, done: () => { scene.remove(o.orb); disposeScene(o.orb); } });
-      }
-    }
-    if (res.ok) {
-      sfx.play('correct'); hud.flash(true);
-      hero.once('1H_Melee_Attack_Slice_Horizontal', 'Idle', { speed: 1.8, fade: 0.05 });
-      engine.particles.emit(pos, 30, { colors: CONFETTI, speed: 4, up: 4, life: 0.8 });
-    } else {
-      sfx.play('wrong');
-      hurt(pos);
-    }
-    if (wasWho && foe) {
-      foe.a.setSilhouette(false);
-      foe.label = `${w.sl.opts[cs].text} 흉내`; drawFoePlate();
-      poof(foe.a.root.position, res.ok ? CONFETTI : ['#ffffff', '#c9b8ff']);
-    }
-    if (over) return;
-    if (res.done) engine.wait(0.5, finishQuestion);
-    else engine.wait(0.55, () => { if (!over && run) startStep(false); });
   }
   function poof(pos, colors) {
     engine.particles.emit(new T.Vector3(pos.x, pos.y + 1.4, pos.z), 34, { colors, speed: 3, up: 3, gravity: 4, life: 0.8 });
@@ -230,25 +174,13 @@ export function createBattle({ session, hud, onEnd }) {
     } else f.a.once('Hit_A', 'Idle');
   }
 
-  function finishQuestion() {
-    if (!run || over) return;
-    const ok = run.allOk, q = run.q;
-    session.record(q, ok);
-    hud.setScore(session.correct);
-    hud.toast(ok, q, ok ? 1300 : 3800);
-    hud.clearQuestion();
-    if (foe && foe.a.sil) { foe.a.setSilhouette(false); }
-    if (foe) { foe.label = foe.base; drawFoePlate(); }
-    run = null;
-    nextQ = ok ? 2.2 : 4.0;
-  }
   function finish() { if (!ended) { ended = true; onEnd({ score: wins, extra: `격파한 상대 ${wins}명` }); } }
 
   // ---------- 입력: 끌어서 이동 ----------
   const toWorldX = (cx) => Math.max(-FW, Math.min(FW, ((cx / innerWidth) - 0.5) * 2 * FW * 1.3));
   let dragging = false;
-  const onDown = (e) => { if (e.target.closest('button')) return; dragging = true; tx = toWorldX(e.clientX); };
-  const onMove = (e) => { if (dragging || e.pointerType === 'mouse') tx = toWorldX(e.clientX); };
+  const onDown = (e) => { if (engine.paused || e.target.closest('button')) return; dragging = true; tx = toWorldX(e.clientX); };
+  const onMove = (e) => { if (engine.paused) return; if (dragging || e.pointerType === 'mouse') tx = toWorldX(e.clientX); };
   const onUp = () => { dragging = false; };
   const onKey = (e) => { if (e.key === 'ArrowLeft') keyDir = -1; if (e.key === 'ArrowRight') keyDir = 1; };
   const onKeyUp = (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') keyDir = 0; };
@@ -286,32 +218,18 @@ export function createBattle({ session, hud, onEnd }) {
       foePlate.style.left = _p.x + 'px'; foePlate.style.top = _p.y + 'px';
     }
 
-    if (!over) {
-      // 불덩이는 문제를 읽는 동안에도 계속 날아온다
+    if (!over && !quizzing) {
+      // 불덩이는 쉬지 않고 날아온다
       const hard = Math.min(1, wins / 4 + session.count / 30);
       fireT -= dt;
       if (fireT <= 0 && foe && foe.ready) {
         if (Math.random() < 0.15 + hard * 0.25) { for (const d of [-1.3, 0, 1.3]) fire(Math.max(-FW, Math.min(FW, px + d))); }
         else fire(Math.max(-FW, Math.min(FW, px + rnd(-0.5, 0.5))));
-        fireT = (wave ? 1.45 : 1.15) - hard * 0.45 + rnd(0, 0.3);
+        fireT = 1.15 - hard * 0.45 + rnd(0, 0.3);
       }
-      // 문제
-      if (!run) {
-        nextQ -= dt;
-        if (nextQ <= 0 && foe && foe.ready) {
-          run = new QRun(session.next());
-          if (run.q.type === 'passage') { foe.a.setSilhouette(true); foe.label = '???'; drawFoePlate(); poof(foe.a.root.position, ['#1b1630', '#6a5d86']); }
-          if (run.q.level >= HARD_LEVEL) {
-            engine.paused = true; dragging = false;
-            hud.preview(run.q, () => { engine.paused = false; startStep(true, true); }, '누르면 정답 구슬이 다가옵니다.');
-          } else startStep(true);
-        }
-      } else if (wave) {
-        wave.z += wave.speed * dt;
-        for (const o of wave.orbs) { o.orb.position.z = wave.z; o.orb.position.y = 1.0 + Math.sin(t * 3 + o.x) * 0.12; o.orb.children[0].rotation.y += dt * 1.5; }
-        hud.timer(1 - (wave.z - wave.z0) / (PZ - wave.z0));
-        if (wave.z >= PZ - 0.25) resolveWave();
-      }
+      // 잠깐 버틴 뒤, 날아오던 불덩이가 다 지나가면 문제를 낸다
+      nextQ -= dt;
+      if (nextQ <= 0 && foe && foe.ready) { fireT = 9; if (!balls.length) askQuestion(); }
     }
 
     for (let i = balls.length - 1; i >= 0; i--) {
@@ -321,7 +239,7 @@ export function createBattle({ session, hud, onEnd }) {
       b.mark.material.opacity = 0.4 + Math.sin(t * 14) * 0.3;
       if (Math.random() < dt * 30) engine.particles.emit(b.m.position, 1, { colors: ['#ffb040', '#ff5d2a'], speed: 0.6, up: 0.8, gravity: 1, life: 0.3, size: 0.9 });
       const z = b.m.position.z;
-      if (!b.done && z > PZ - 0.35 && z < PZ + 0.45 && Math.abs(b.m.position.x - px) < 0.55 && invuln <= 0 && !over) {
+      if (!b.done && z > PZ - 0.35 && z < PZ + 0.45 && Math.abs(b.m.position.x - px) < 0.55 && invuln <= 0 && !over && !GOD) {
         b.done = true;
         hero.once('Hit_B', 'Idle', { speed: 1.5 });
         hurt(b.m.position.clone());
@@ -342,7 +260,7 @@ export function createBattle({ session, hud, onEnd }) {
       removeEventListener('pointerdown', onDown); removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onUp); removeEventListener('pointercancel', onUp);
       removeEventListener('keydown', onKey); removeEventListener('keyup', onKeyUp);
-      ballGeo.dispose(); markGeo.dispose(); orbGeo.dispose(); stripGeo.dispose();
+      ballGeo.dispose(); markGeo.dispose(); orbGeo.dispose();
       disposeScene(scene);
     },
   };

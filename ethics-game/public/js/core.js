@@ -5,9 +5,6 @@ const KEY = 'ethics-quest.v1';
 export const SRS_GAPS = [4, 20, 60, 150, 300, 500];
 const REVIEW_RATIO = 0.2;
 
-// 이 레벨 이상은 '어려운 문제': 게임을 멈추고 먼저 읽게 한다
-export const HARD_LEVEL = 4;
-
 export const TYPE_LABEL = {
   ox: 'O/X', choice: '객관식', multi: '모두 고르기',
   classify: '분류', order: '순서', passage: '제시문',

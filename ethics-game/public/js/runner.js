@@ -1,11 +1,10 @@
 // 게임 A: 지식 러너
-import { T, engine, Actor, makeSky, addLights, toonMat, glowMat, textSprite, COLORS, CONFETTI, sfx, ease, disposeScene } from './engine.js';
-import { QRun, store, stepSlots, HARD_LEVEL } from './core.js';
+import { T, engine, Actor, makeSky, addLights, toonMat, glowMat, CONFETTI, sfx, ease, disposeScene } from './engine.js';
+import { store } from './core.js';
 import { makeClouds } from './scenery.js';
 
 const ROAD_W = 5.4;
 const LW = ROAD_W / 3;      // 기본 3레인의 한 칸 너비
-const Q_SPEED = 11;          // 문제 구간 속도(고정)
 const SPAWN_Z = -64;
 const CAR = 8;               // 수레 한 칸 길이
 const TOP = 1.9;             // 수레 지붕 높이
@@ -173,11 +172,6 @@ export function createRunner({ session, hud, onEnd }) {
   const stripeTex = stripeTexture();
   const postMat = toonMat(0x8a5a35), whiteMat = toonMat(0xffffff), stripeMat = toonMat(0xffffff, { map: stripeTex });
   const postGeo = new T.CylinderGeometry(0.1, 0.12, 1, 8);
-  const paneMats = {}, stripMats = {};
-  for (const c of COLORS) {
-    paneMats[c] = glowMat(c, 1.2, { transparent: true, opacity: 0.62, side: T.DoubleSide, depthWrite: false });
-    stripMats[c] = new T.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.34, depthWrite: false });
-  }
   // 수레(올라탈 수 있는 긴 장애물)
   const texList = [];
   const wagonKinds = ['#ff5d6c', '#4aa8ff', '#35d07f', '#ffc93c'].map((c) => {
@@ -207,19 +201,12 @@ export function createRunner({ session, hud, onEnd }) {
   };
 
   // 상태
-  let lanes = 3, speed = 0, baseSpeed = 15, dist = 0;
+  let speed = 0, baseSpeed = 15, dist = 0;
   let hearts = 3, coins = 0, phase = 'intro', phaseT = 0, runLeft = 5, spawnGap = 0;
-  let run = null, gate = null, over = false, ended = false;
+  let over = false, ended = false;
   const ents = [];
   let trainSeq = 0;
   hud.setHearts(hearts); hud.setScore(0); hud.setExtra('🪙 0');
-
-  function remapLane(n) {
-    lanes = n;
-    let best = 0, bd = 1e9;
-    for (let i = 0; i < n; i++) { const d = Math.abs(laneX(i, n) - player.x); if (d < bd) { bd = d; best = i; } }
-    player.lane = best;
-  }
 
   // ---------- 장애물/코인 ----------
   function addEnt(e) { e.o.position.z = e.z; scene.add(e.o); ents.push(e); popIn(e.o); return e; }
@@ -354,88 +341,28 @@ export function createRunner({ session, hud, onEnd }) {
     spawnGap = len + rnd(10, 15) - hard * 4;
   }
 
-  // ---------- 문제 게이트 ----------
-  function readTime(step, first) {
-    let chars = (step.sub || '').length;
-    if (first || step.passage) chars += step.prompt.length;
-    if (first && step.passage) chars += step.passage.length;
-    if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
-    const t = (first ? 2.6 : 1.9) + chars * 0.075;
-    return Math.max(first ? 3.6 : 2.6, Math.min(13, t));
-  }
-  function buildGate(step) {
-    const { n, opts, colors, labels, short } = stepSlots(step);
-    const w = ROAD_W / n;
-    const g = new T.Group();
-    opts.forEach((o, i) => {
-      const x = laneX(i, n);
-      if (o) {
-        const pane = new T.Mesh(new T.PlaneGeometry(w * 0.9, 2.7), paneMats[colors[i]]);
-        pane.position.set(x, 1.45, 0); pane.userData.ownGeo = true; pane.userData.slot = i; g.add(pane);
-        const strip = new T.Mesh(new T.PlaneGeometry(w * 0.9, 18), stripMats[colors[i]]);
-        strip.rotation.x = -Math.PI / 2; strip.position.set(x, 0.05, 9); strip.userData.ownGeo = true; g.add(strip);
+  // ---------- 문제 ----------
+  // 길이 비면 게임을 멈추고 문제를 낸다. 풀고 나면 다시 달린다.
+  function askQuestion() {
+    phase = 'quiz';
+    engine.paused = true;
+    tStart = null;
+    const q = session.next();
+    hud.quiz(q, (ok) => {
+      engine.paused = false;
+      session.record(q, ok);
+      hud.setScore(session.correct);
+      hud.flash(ok);
+      if (ok) {
+        engine.particles.emit(new T.Vector3(player.x, 1.4 + player.y, 0), 46, { colors: CONFETTI, speed: 5, up: 6, life: 1.0 });
+        actor.once('Cheer', 'Running_A', { speed: 1.8 });
+        baseSpeed = Math.min(23, baseSpeed + 0.45);
+      } else {
+        engine.shake(0.35); actor.flash();
+        loseHeart();
       }
-      const s = textSprite(labels[i], { w: 320, h: 200, size: short ? 96 : 150, bg: o ? colors[i] : '#9a94a8', border: '#ffffff', color: '#fff', stroke: 'rgba(0,0,0,.25)', scale: Math.min(w * 0.94, 1.9) });
-      s.position.set(x, 3.75, 0); g.add(s);
+      if (!over) { phase = 'run'; runLeft = rnd(7, 10); spawnGap = 4; hud.center('출발!', 600); }
     });
-    for (let i = 0; i <= n; i++) {
-      const p = new T.Mesh(postGeo, whiteMat); p.scale.set(1, 3.0, 1); p.position.set(-ROAD_W / 2 + i * w, 1.5, 0); p.castShadow = true; g.add(p);
-    }
-    const top = new T.Mesh(new T.BoxGeometry(ROAD_W + 0.3, 0.2, 0.2), whiteMat);
-    top.position.y = 3.0; top.userData.ownGeo = true; g.add(top);
-    return { o: g, n, opts };
-  }
-
-  // quick: 미리 읽은 문제라서 게이트를 가까이에 낸다
-  function askStep(first, quick = false) {
-    const step = run.step;
-    const g = buildGate(step);
-    const z0 = quick ? -38 : -Math.max(30, readTime(step, first) * Q_SPEED);
-    gate = { ...g, z: z0, z0, step, done: false };
-    gate.o.position.z = z0;
-    scene.add(gate.o);
-    remapLane(gate.n);
-    const hint = step.kind === 'ox' ? '맞으면 O, 틀리면 X 길로 달리세요'
-      : step.kind === 'tf' ? '옳은 내용이면 초록, 틀리면 빨강 길로'
-        : '정답 색깔의 길로 달리세요';
-    hud.showQuestion(run.q, step, { opts: true, hint });
-    sfx.play('gate');
-  }
-
-  function resolveGate() {
-    const g = gate; g.done = true;
-    const opt = g.opts[player.lane] || null;
-    const res = run.answer(opt);
-    const pos = new T.Vector3(player.x, 1.4 + player.y, 0);
-    hud.flash(res.ok);
-    if (res.ok) {
-      sfx.play('correct');
-      engine.particles.emit(pos, 46, { colors: CONFETTI, speed: 5, up: 6, life: 1.0 });
-    } else {
-      sfx.play('wrong'); engine.shake(0.35);
-      engine.particles.emit(pos, 18, { colors: ['#ff5d6c', '#7a2a3a'], speed: 4, up: 3, life: 0.6 });
-      actor.flash();
-    }
-    const cs = g.opts.findIndex((o) => o && o.correct);
-    hud.markOption(cs, 'right');
-    g.o.children.forEach((c) => { if (c.userData.slot !== undefined && c.userData.slot !== cs) c.visible = false; });
-    const old = g.o;
-    ents.push({ type: 'deco', z: g.z, o: old });
-    gate = null;
-    remapLane(3);
-    if (res.done) finishQuestion(); else engine.wait(0.3, () => { if (!over && run) askStep(false); });
-  }
-
-  function finishQuestion() {
-    const ok = run.allOk, q = run.q;
-    session.record(q, ok);
-    hud.setScore(session.correct);
-    hud.toast(ok, q, ok ? 1500 : 3800);
-    engine.wait(0.6, () => hud.clearQuestion());
-    run = null;
-    if (!ok) loseHeart();
-    else { actor.once('Cheer', 'Running_A', { speed: 1.8 }); baseSpeed = Math.min(23, baseSpeed + 0.45); }
-    if (!over) { phase = 'run'; runLeft = rnd(7, 10); spawnGap = 4; }
   }
 
   function loseHeart() {
@@ -447,7 +374,6 @@ export function createRunner({ session, hud, onEnd }) {
     over = true; phase = 'dead'; phaseT = 0;
     actor.once('Death_A', null);
     sfx.play('lose');
-    hud.clearQuestion();
   }
   function finish() {
     if (ended) return;
@@ -470,11 +396,11 @@ export function createRunner({ session, hud, onEnd }) {
 
   // ---------- 입력 ----------
   function act(dir) {
-    if (over || phase === 'intro') return;
+    if (over || phase === 'intro' || engine.paused) return;
     if (dir === 'left' || dir === 'right') {
       const to = player.lane + (dir === 'left' ? -1 : 1);
-      if (to < 0 || to >= lanes) return;
-      if (lanes === 3 && solidAt(to).block) {
+      if (to < 0 || to > 2) return;
+      if (solidAt(to).block) {
         // 옆 수레에 부딪혀 제자리로 튕긴다
         bump = dir === 'left' ? -0.5 : 0.5; sfx.play('hit'); engine.shake(0.15);
         return;
@@ -516,8 +442,7 @@ export function createRunner({ session, hud, onEnd }) {
     phaseT += dt; t0 += dt;
     // 속도
     let target = 0;
-    if (phase === 'run' || phase === 'clear') target = baseSpeed;
-    else if (phase === 'ask') target = Q_SPEED;
+    if (phase === 'run' || phase === 'clear' || phase === 'quiz') target = baseSpeed;
     speed += (target - speed) * Math.min(1, dt * (over ? 2.5 : 3.5));
     const move = speed * dt;
     dist += move;
@@ -534,21 +459,16 @@ export function createRunner({ session, hud, onEnd }) {
       if (runLeft <= 0) phase = 'clear';
     } else if (phase === 'clear') {
       if (!ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < 3)) {
-        phase = 'ask';
-        run = new QRun(session.next());
-        if (run.q.level >= HARD_LEVEL) {
-          engine.paused = true;
-          hud.preview(run.q, () => { engine.paused = false; askStep(true, true); }, '누르면 정답 게이트가 나옵니다.');
-        } else askStep(true);
+        askQuestion();
       }
     } else if (phase === 'dead' && phaseT > 1.9) finish();
 
     // 플레이어
-    const tx = laneX(player.lane, lanes);
+    const tx = laneX(player.lane, 3);
     const dx = tx - player.x;
     player.x += dx * Math.min(1, dt * 13);
     // 발밑 높이(땅 또는 수레 지붕)와 정면 충돌
-    const sa = lanes === 3 ? solidAt(player.lane) : { ground: 0, block: null };
+    const sa = solidAt(player.lane);
     if (sa.block && !GOD && !over && player.invuln <= 0) {
       const id = sa.block.train;
       for (const e of ents) if (e.train === id && !e.ghost) {
@@ -618,13 +538,6 @@ export function createRunner({ session, hud, onEnd }) {
         }
       }
       if (e.z - (e.len || 0) > 12) { scene.remove(e.o); disposeScene(e.o); ents.splice(i, 1); }
-    }
-
-    // 문제 게이트
-    if (gate) {
-      gate.z += move; gate.o.position.z = gate.z;
-      hud.timer(gate.z / gate.z0);
-      if (gate.z >= -0.15 && !gate.done) resolveGate();
     }
 
     // 카메라
