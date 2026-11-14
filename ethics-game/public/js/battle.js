@@ -46,7 +46,7 @@ export function createBattle({ session, hud, onEnd }) {
 
   // 경기장 크기
   const FW = 2.3;                 // 움직일 수 있는 가로 반폭
-  const PZ = 3.4, EZ = -6.2;      // 플레이어 / 상대의 z 위치
+  const PZ = 3.4, EZ = -3.0;      // 플레이어 / 상대의 z 위치
   const rnd = (a, b) => a + Math.random() * (b - a);
   const GOD = new URLSearchParams(location.search).has('god'); // 테스트용: 불덩이 무시
   const AUTO = new URLSearchParams(location.search).has('auto'); // 테스트용: 정답 구슬을 자동으로 받아침
@@ -61,11 +61,12 @@ export function createBattle({ session, hud, onEnd }) {
   let foe = null, foeIdx = 0;
 
   // 상태
-  let lives = 4, wins = 0, over = false, ended = false, t = 0;
+  // 점수 = 적에게 입힌 피해량 합계
+  let lives = 4, wins = 0, dealt = 0, over = false, ended = false, t = 0;
   let run = null, step = null, wave = null, nextQ = 2.2;
   let px = 0, tx = 0, invuln = 0, fireT = 2, keyDir = 0;
   const balls = [];
-  hud.setHearts(lives, 4); hud.setScore(0); hud.setExtra('격파 0');
+  hud.setHearts(lives, 4); hud.setScore(0); hud.setExtra('💥 0 · 격파 0');
 
   const foePlate = document.createElement('div');
   foePlate.className = 'nameplate'; foePlate.style.pointerEvents = 'none';
@@ -115,7 +116,7 @@ export function createBattle({ session, hud, onEnd }) {
     scene.add(m);
     const mark = new T.Mesh(markGeo, markMat); mark.rotation.x = -Math.PI / 2; mark.position.set(targetX, 0.05, PZ); scene.add(mark);
     const hard = Math.min(1, wins / 4 + session.count / 30);
-    const speed = 7.2 + hard * 3.5;
+    const speed = 5.2 + hard * 2.4;   // 거리가 짧아서 느리게
     const dir = new T.Vector3(targetX - from.x, 0, PZ - from.z).normalize();
     balls.push({ m, mark, dir, speed, done: false });
     foe.a.once('Spellcast_Shoot', 'Idle', { speed: 2.2, fade: 0.05 });
@@ -229,12 +230,14 @@ export function createBattle({ session, hud, onEnd }) {
     f.a.flash(0xffffff);
     engine.particles.emit(new T.Vector3(f.a.root.position.x, 1.5, EZ), 26, { colors: ['#fff', '#ffc93c', '#ff5d6c'], speed: 5, up: 4, life: 0.7 });
     if (!dmg) { f.a.once('Hit_A', 'Idle'); return; }
-    f.hp = Math.max(0, f.hp - dmg); drawFoePlate();
+    const real = Math.min(f.hp, dmg);
+    f.hp -= real; drawFoePlate();
+    dealt += real; hud.setExtra(`💥 ${dealt} · 격파 ${wins}`); hud.setGameScore(dealt);
     if (dmg > 1) hud.center('연속 타격!', 700);
     if (f.hp <= 0) {
       f.ready = false;
       f.a.once('Death_A', null);
-      wins++; hud.setExtra('격파 ' + wins); hud.setGameScore(wins);
+      wins++; hud.setExtra(`💥 ${dealt} · 격파 ${wins}`);
       sfx.play('win'); hero.once('Cheer', 'Idle');
       engine.wait(1.0, () => { poof(f.a.root.position, CONFETTI); scene.remove(f.a.root); if (foe === f) foe = null; drawFoePlate(); if (!over) spawnFoe(); });
     } else f.a.once('Hit_A', 'Idle');
@@ -252,7 +255,7 @@ export function createBattle({ session, hud, onEnd }) {
     run = null;
     nextQ = ok ? 2.2 : 4.0;
   }
-  function finish() { if (!ended) { ended = true; onEnd({ score: wins, extra: `격파한 상대 ${wins}명` }); } }
+  function finish() { if (!ended) { ended = true; onEnd({ score: dealt, extra: `입힌 피해 ${dealt} · 격파한 상대 ${wins}명` }); } }
 
   // ---------- 입력: 끌어서 이동 ----------
   const toWorldX = (cx) => Math.max(-FW, Math.min(FW, ((cx / innerWidth) - 0.5) * 2 * FW * 1.3));
@@ -338,8 +341,8 @@ export function createBattle({ session, hud, onEnd }) {
       if (b.done || z > PZ + 2.5) { scene.remove(b.m); scene.remove(b.mark); balls.splice(i, 1); }
     }
 
-    camera.position.set(px * 0.25, 9.2, 10.6);
-    camera.lookAt(px * 0.15, 0.6, -3.8);
+    camera.position.set(px * 0.25, 10.5, 9.6);
+    camera.lookAt(px * 0.15, 0, -2.9);
     camera.updateMatrixWorld();
   }
 

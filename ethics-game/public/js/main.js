@@ -12,7 +12,7 @@ const esc = hud.esc;
 const GAMES = {
   runner: { name: '지식 러너', create: createRunner, unit: '코인', icon: '🪙' },
   slash: { name: '개념 슬래시', create: createSlash, unit: '벤 물건', icon: '🗡️' },
-  battle: { name: '논쟁 배틀', create: createBattle, unit: '격파', icon: '⚔️' },
+  battle: { name: '논쟁 배틀', create: createBattle, unit: '입힌 피해', icon: '💥' },
 };
 let lobby = null, game = null, modalOnClose = null;
 
@@ -135,7 +135,7 @@ function bindReports() {
 // ---------- 랭킹 ----------
 const RANK_TABS = [
   ['total', '정답', '문제', '맞힌 문제 수 (누적)'], ['solved', '푼 문제', '문제', '푼 문제 수 (누적)'],
-  ['runner', '🪙 코인', '개', '지식 러너에서 한 판에 모은 코인 최고 기록'], ['slash', '🗡️ 베기', '개', '개념 슬래시에서 한 판에 벤 물건 최고 기록'], ['battle', '⚔️ 격파', '명', '논쟁 배틀에서 한 판에 격파한 상대 최고 기록'],
+  ['runner', '🪙 코인', '개', '지식 러너에서 한 판에 모은 코인 최고 기록'], ['slash', '🗡️ 베기', '개', '개념 슬래시에서 한 판에 벤 물건 최고 기록'], ['battle', '💥 피해', '점', '논쟁 배틀에서 한 판에 적에게 입힌 피해 최고 기록'],
 ];
 async function showRank(sort = 'total') {
   const tab = RANK_TABS.find((t) => t[0] === sort);
