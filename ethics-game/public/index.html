@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#6ec6ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>윤리 퀘스트</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23ffc93c%27/%3E%3Ctext x=%2732%27 y=%2746%27 font-size=%2738%27 text-anchor=%27middle%27%3E%E2%9A%94%3C/text%3E%3C/svg%3E">
+<link rel="preload" href="assets/fonts/Jua.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- 로딩 -->
+<div id="loading" class="screen">
+  <div class="logo"><span>윤리</span><span class="q">퀘스트</span></div>
+  <div class="load-bar"><i id="load-fill"></i></div>
+  <div id="load-text">불러오는 중…</div>
+</div>
+
+<!-- 홈 -->
+<div id="home" class="screen hidden">
+  <div class="home-top">
+    <div class="logo small"><span>윤리</span><span class="q">퀘스트</span></div>
+    <button id="btn-nick" class="pill"><span id="nick-text">닉네임</span> ✎</button>
+  </div>
+  <div class="home-stats">
+    <div class="stat"><b id="stat-correct">0</b><span>맞힌 문제</span></div>
+    <div class="stat"><b id="stat-rank">-</b><span>내 순위</span></div>
+    <div class="stat"><b id="stat-review">0</b><span>복습 대기</span></div>
+  </div>
+  <div class="home-games">
+    <button class="game-card g-runner" data-game="runner"><i>🏃</i><div><b>지식 러너</b><span>달리면서 정답 게이트 통과</span></div><em id="best-runner"></em></button>
+    <button class="game-card g-swipe" data-game="swipe"><i>🃏</i><div><b>개념 스와이프</b><span>카드를 알맞은 방향으로</span></div><em id="best-swipe"></em></button>
+    <button class="game-card g-battle" data-game="battle"><i>⚔️</i><div><b>논쟁 배틀</b><span>상대의 주장을 격파</span></div><em id="best-battle"></em></button>
+  </div>
+  <div class="home-nav">
+    <button id="btn-rank"><i>🏆</i>랭킹</button>
+    <button id="btn-notes"><i>📒</i>오답노트</button>
+    <button id="btn-settings"><i>⚙️</i>설정</button>
+  </div>
+</div>
+
+<!-- 게임 HUD -->
+<div id="hud" class="hidden">
+  <div id="hud-top">
+    <div id="hearts"></div>
+    <div id="hud-extra"></div>
+    <div id="hud-score">✔ <b>0</b></div>
+    <button id="btn-quit" aria-label="그만하기">✕</button>
+  </div>
+  <div id="qpanel" class="hidden">
+    <div class="q-badges"><span id="q-type"></span><span id="q-lv"></span><span id="q-review">🔁 복습</span><span id="q-prog"></span></div>
+    <div id="q-passage"></div>
+    <div id="q-prompt"></div>
+    <div id="q-chain"></div>
+    <div id="q-sub"></div>
+    <div id="q-opts"></div>
+    <div id="q-hint"></div>
+    <div id="q-timer"><i></i></div>
+  </div>
+  <div id="combo"></div>
+  <div id="center-text"></div>
+  <div id="toast"></div>
+  <div id="game-ui"></div>
+  <div id="flash"></div>
+</div>
+
+<!-- 모달 -->
+<div id="modal" class="hidden">
+  <div class="sheet">
+    <button class="sheet-close" id="modal-close" aria-label="닫기">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Netlify 배포 설정
+# 이 폴더(ethics-game)를 Base directory로 지정하면 된다. 빌드 과정은 없다(정적 파일 + 함수).
+[build]
+  publish = "public"
+  command = ""
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# 모델/글꼴/라이브러리는 바뀌지 않으므로 오래 캐시
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+# 문제와 코드는 자주 바뀌므로 매번 확인
+[[headers]]
+  for = "/questions/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-cache"

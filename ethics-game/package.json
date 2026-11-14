@@ -1,0 +1,14 @@
+{
+  "name": "ethics-quest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "윤리 퀘스트: 게임으로 공부하는 현대사회와 윤리",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "check": "node tools/check-questions.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^11.1.9"
+  }
+}

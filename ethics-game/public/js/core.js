@@ -1,0 +1,238 @@
+// 저장, 문제 은행, 출제(적응형 난이도 + 복습), 랭킹 통신
+
+const KEY = 'ethics-quest.v1';
+// 복습 단계별 간격(푼 문제 수 기준). 0단계는 3~5문제 뒤.
+export const SRS_GAPS = [4, 20, 60, 150, 300, 500];
+const REVIEW_RATIO = 0.2;
+
+export const TYPE_LABEL = {
+  ox: 'O/X', choice: '객관식', multi: '모두 고르기',
+  classify: '분류', order: '순서', passage: '제시문',
+};
+
+// 테스트용 주소창 옵션: ?type=ox 처럼 문제 유형을 고정
+const DEBUG_TYPE = new URLSearchParams(location.search).get('type');
+const rand = (n) => Math.floor(Math.random() * n);
+export function shuffle(a) {
+  const r = a.slice();
+  for (let i = r.length - 1; i > 0; i--) { const j = rand(i + 1); [r[i], r[j]] = [r[j], r[i]]; }
+  return r;
+}
+
+function uid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
+const DEFAULTS = () => ({
+  uid: uid(), nickname: '', solved: 0, correct: 0,
+  level: 2, fixedLevel: 0, srs: {}, seen: [],
+  best: { runner: 0, swipe: 0, battle: 0 },
+  opts: { sound: true, music: true, quality: 'auto', char: 'knight' },
+});
+
+export const store = {
+  d: DEFAULTS(),
+  load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const p = JSON.parse(raw), def = DEFAULTS();
+        this.d = { ...def, ...p, best: { ...def.best, ...p.best }, opts: { ...def.opts, ...p.opts } };
+      }
+    } catch (e) { /* 저장소를 못 쓰는 환경에서도 동작 */ }
+    this.save();
+  },
+  save() {
+    try { localStorage.setItem(KEY, JSON.stringify(this.d)); } catch (e) { /* 무시 */ }
+  },
+};
+
+export const bank = {
+  list: [], byId: {},
+  async load() {
+    const idx = await (await fetch('questions/index.json')).json();
+    const parts = await Promise.all(idx.files.map((f) => fetch('questions/' + f).then((r) => r.json())));
+    this.list = parts.flat();
+    this.byId = Object.fromEntries(this.list.map((q) => [q.id, q]));
+  },
+};
+
+// 화면에 낼 형태로 가공(보기 섞기 등)
+function prepare(q) {
+  const p = JSON.parse(JSON.stringify(q));
+  if (p.type === 'choice') {
+    p.opts = shuffle(p.options.map((text, i) => ({ text, correct: i === p.answer })));
+  } else if (p.type === 'multi') {
+    p.items = shuffle(p.items);
+  } else if (p.type === 'classify') {
+    p.items = shuffle(p.items);
+  } else if (p.type === 'order') {
+    let s = shuffle(p.items);
+    if (s.every((v, i) => v === p.items[i])) s = s.slice(1).concat(s[0]);
+    p.shown = s;
+  } else if (p.type === 'passage') {
+    p.who.opts = shuffle(p.who.options.map((text, i) => ({ text, correct: i === p.who.answer })));
+    p.then.opts = shuffle(p.then.options.map((text, i) => ({ text, correct: i === p.then.answer })));
+  }
+  return p;
+}
+
+// 문제를 "한 번의 선택" 단위(step)로 분해. 세 게임이 같은 구조를 각자 방식으로 표현한다.
+export function buildSteps(q) {
+  const steps = [];
+  const base = { prompt: q.stem, type: q.type };
+  if (q.type === 'ox') {
+    steps.push({ ...base, kind: 'ox', options: [{ text: 'O', correct: q.answer === true }, { text: 'X', correct: q.answer === false }] });
+  } else if (q.type === 'choice') {
+    steps.push({ ...base, kind: 'pick', options: q.opts });
+  } else if (q.type === 'multi') {
+    q.items.forEach((it) => steps.push({
+      ...base, kind: 'tf', sub: it.text,
+      options: [{ text: '옳음', correct: it.correct }, { text: '틀림', correct: !it.correct }],
+    }));
+  } else if (q.type === 'classify') {
+    q.items.forEach((it) => steps.push({
+      ...base, kind: 'pick', sub: it.text, fixed: true,
+      options: q.buckets.map((text, i) => ({ text, correct: i === it.bucket, slot: i })),
+    }));
+  } else if (q.type === 'order') {
+    const slotOf = (t) => q.shown.indexOf(t);
+    for (let k = 0; k < q.items.length - 1; k++) {
+      const remaining = q.shown.filter((t) => q.items.indexOf(t) >= k);
+      steps.push({
+        ...base, kind: 'pick', sub: `${k + 1}번째는?`, fixed: true, chain: q.items.slice(0, k),
+        slots: q.shown.length,
+        options: remaining.map((text) => ({ text, correct: text === q.items[k], slot: slotOf(text) })),
+      });
+    }
+  } else if (q.type === 'passage') {
+    const who = q.who.opts.find((o) => o.correct).text;
+    steps.push({ ...base, kind: 'pick', prompt: q.who.stem || '이 주장을 한 사상가는?', passage: q.passage, options: q.who.opts, isWho: true });
+    steps.push({ ...base, kind: 'pick', prompt: q.then.stem, passage: q.passage, options: q.then.opts, reveal: who });
+  }
+  steps.forEach((s, i) => { s.index = i; s.total = steps.length; });
+  return steps;
+}
+
+// 문제 하나의 진행 상태
+export class QRun {
+  constructor(q) { this.q = q; this.steps = buildSteps(q); this.i = 0; this.allOk = true; }
+  get step() { return this.steps[this.i]; }
+  get done() { return this.i >= this.steps.length; }
+  // opt: 선택한 보기(없으면 시간 초과/미응답). 반환: {ok, correct, done}
+  answer(opt) {
+    const s = this.step;
+    const correct = s.options.find((o) => o.correct);
+    const ok = !!opt && opt.correct;
+    if (!ok) this.allOk = false;
+    this.i++;
+    return { ok, correct, done: this.done };
+  }
+}
+
+export function answerText(q) {
+  switch (q.type) {
+    case 'ox': return q.answer ? 'O' : 'X';
+    case 'choice': return q.options[q.answer];
+    case 'multi': return '옳은 것: ' + q.items.filter((i) => i.correct).map((i) => i.text).join(' / ');
+    case 'classify': return q.buckets.map((b, i) => `${b}: ${q.items.filter((it) => it.bucket === i).map((it) => it.text).join(', ') || '-'}`).join(' | ');
+    case 'order': return q.items.join(' → ');
+    case 'passage': return `${q.who.options[q.who.answer]} — ${q.then.options[q.then.answer]}`;
+    default: return '';
+  }
+}
+export function stemText(q) {
+  return q.type === 'passage' ? `"${q.passage}"` : q.stem;
+}
+
+// 한 판(게임 1회) 동안의 출제 관리
+export class Session {
+  constructor() { this.count = 0; this.reviews = 0; this.correct = 0; this.log = []; this.lastId = null; }
+
+  get targetLevel() {
+    const d = store.d;
+    return d.fixedLevel || Math.max(1, Math.min(5, Math.round(d.level)));
+  }
+
+  next() {
+    const d = store.d;
+    let raw = null, isReview = false;
+    // 1) 출제 시점이 된 복습 문제 (한 판의 최대 20%)
+    const allowed = Math.max(1, Math.floor((this.count + 1) * REVIEW_RATIO));
+    if (this.reviews < allowed) {
+      const due = Object.entries(d.srs)
+        .filter(([id, s]) => s.due <= d.solved && id !== this.lastId && bank.byId[id])
+        .sort((a, b) => a[1].due - b[1].due);
+      if (due.length) { raw = bank.byId[due[0][0]]; isReview = true; }
+    }
+    // 2) 새 문제: 한 바퀴 다 돌기 전에는 반복하지 않음
+    if (!raw) {
+      const seen = new Set(d.seen);
+      let pool = bank.list.filter((q) => !seen.has(q.id) && !d.srs[q.id]);
+      if (!pool.length) {
+        d.seen = [];
+        pool = bank.list.filter((q) => q.id !== this.lastId);
+      }
+      if (DEBUG_TYPE) pool = bank.list.filter((q) => q.type === DEBUG_TYPE && q.id !== this.lastId);
+      const t = this.targetLevel;
+      const byDist = (k) => pool.filter((q) => Math.abs(q.level - t) <= k);
+      const cand = [0, 1, 2, 4].map(byDist).find((c) => c.length) || pool;
+      raw = cand[rand(cand.length)];
+    }
+    this.lastId = raw.id;
+    if (isReview) this.reviews++;
+    const q = prepare(raw);
+    q.isReview = isReview;
+    return q;
+  }
+
+  record(q, ok) {
+    const d = store.d;
+    d.solved++;
+    this.count++;
+    if (ok) { d.correct++; this.correct++; }
+    if (!d.seen.includes(q.id)) d.seen.push(q.id);
+    const s = d.srs[q.id];
+    if (!ok) {
+      d.srs[q.id] = { stage: 0, due: d.solved + 3 + rand(3) };
+    } else if (s) {
+      s.stage = Math.min(5, s.stage + 1);
+      s.due = d.solved + SRS_GAPS[s.stage];
+    }
+    // 자동 난이도: 정답률 약 75%에서 균형
+    if (!d.fixedLevel && !q.isReview) {
+      d.level = Math.max(1, Math.min(5, d.level + (ok ? 0.1 : -0.3)));
+    }
+    this.log.push({ id: q.id, ok });
+    store.save();
+  }
+}
+
+export const api = {
+  async submit() {
+    const d = store.d;
+    if (!d.nickname) return;
+    try {
+      await fetch('/api/rank', {
+        method: 'POST', keepalive: true,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ uid: d.uid, nickname: d.nickname, total: d.correct }),
+      });
+    } catch (e) { /* 오프라인이면 다음에 다시 전송 */ }
+  },
+  async top() {
+    const r = await fetch('/api/rank?uid=' + encodeURIComponent(store.d.uid));
+    if (!r.ok) throw new Error('rank ' + r.status);
+    return r.json();
+  },
+  async report(qid, note) {
+    try {
+      await fetch('/api/report', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qid, note: note || '', uid: store.d.uid }),
+      });
+      return true;
+    } catch (e) { return false; }
+  },
+};
