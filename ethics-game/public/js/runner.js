@@ -9,6 +9,7 @@ const Q_SPEED = 11;          // 문제 구간 속도(고정)
 const SPAWN_Z = -64;
 const CAR = 8;               // 수레 한 칸 길이
 const TOP = 1.9;             // 수레 지붕 높이
+const COIN_GAP = 2.4;
 const STEP = 0.5;            // 이 높이 차이까지는 그대로 올라선다
 const laneX = (i, n) => (i - (n - 1) / 2) * (ROAD_W / n);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -161,8 +162,14 @@ export function createRunner({ session, hud, onEnd }) {
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.04; scene.add(blob);
 
   // 공용 형상/재질
-  const coinGeo = new T.CylinderGeometry(0.36, 0.36, 0.1, 16); coinGeo.rotateX(Math.PI / 2);
-  const coinMat = toonMat(0xffcf3a, { emissive: 0xff9d00, emissiveIntensity: 0.55 });
+  // 코인: 눕혀 있는 모델을 세워서 빙글빙글 돌린다
+  function makeCoin() {
+    const g = new T.Group();
+    const c = engine.assets.coin.clone(true);
+    c.rotation.x = Math.PI / 2; c.scale.setScalar(2.3);
+    g.add(c);
+    return g;
+  }
   const stripeTex = stripeTexture();
   const postMat = toonMat(0x8a5a35), whiteMat = toonMat(0xffffff), stripeMat = toonMat(0xffffff, { map: stripeTex });
   const postGeo = new T.CylinderGeometry(0.1, 0.12, 1, 8);
@@ -223,11 +230,11 @@ export function createRunner({ session, hud, onEnd }) {
   }
   function coinLine(lane, z, n = 5, arc = false, baseY = 0) {
     for (let i = 0; i < n; i++) {
-      const m = new T.Mesh(coinGeo, coinMat);
+      const m = makeCoin(); m.rotation.y = i * 0.7;
       const y = baseY + (arc ? 1.0 + Math.sin((i / (n - 1)) * Math.PI) * 1.5 : 1.0);
       m.position.set(laneX(lane, 3), y, 0);
-      ents.push({ type: 'coin', z: z - i * 1.7, o: m, lane });
-      m.position.z = z - i * 1.7; scene.add(m);
+      ents.push({ type: 'coin', z: z - i * COIN_GAP, o: m, lane });
+      m.position.z = z - i * COIN_GAP; scene.add(m);
     }
   }
   function crate(lane, z) {
@@ -300,7 +307,7 @@ export function createRunner({ session, hud, onEnd }) {
       const o = wagonMesh(kind, moving && i === 0); o.position.x = x;
       addEnt({ type: 'solid', z: z - i * CAR, o, lane, len: CAR, top: TOP, train: id, vz, wheels: true });
     }
-    if (coinsTop) coinLine(lane, z - 2, Math.floor((cars * CAR - 3) / 1.7), false, TOP);
+    if (coinsTop) coinLine(lane, z - 2, Math.floor((cars * CAR - 3) / COIN_GAP), false, TOP);
     return (ramp ? RAMP_L : 0) + cars * CAR;
   }
 
@@ -503,8 +510,9 @@ export function createRunner({ session, hud, onEnd }) {
   // ---------- 진행 ----------
   let countdown = 3, cdT = 0.3, lean = 0, bump = 0, camY = 0;
   const _dust = new T.Vector3();
+  let t0 = 0;
   function update(dt) {
-    phaseT += dt;
+    phaseT += dt; t0 += dt;
     // 속도
     let target = 0;
     if (phase === 'run' || phase === 'clear') target = baseSpeed;
@@ -585,7 +593,7 @@ export function createRunner({ session, hud, onEnd }) {
       e.z += move + (e.vz || 0) * dt; e.o.position.z = e.z;
       if (e.wheels) e.o.children.forEach((c) => { if (c.userData.wheel) c.rotation.x -= (move + (e.vz || 0) * dt) / 0.42; });
       if (e.type === 'coin') {
-        e.o.rotation.y += dt * 5;
+        e.o.rotation.y += dt * 4.5; e.o.children[0].position.y = Math.sin(t0 * 4 + e.z * 0.4) * 0.08;
         if (Math.abs(e.z) < 0.75 && Math.abs(e.o.position.x - player.x) < LW * 0.48 && Math.abs(e.o.position.y - (player.y + 1)) < 1.25) {
           coins++; hud.setExtra('🪙 ' + coins); sfx.play('coin');
           engine.particles.emit(e.o.position, 7, { colors: ['#ffd23c', '#fff3a8'], speed: 2.5, up: 3, life: 0.45, size: 0.8 });

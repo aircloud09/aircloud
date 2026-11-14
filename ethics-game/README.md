@@ -64,7 +64,7 @@ tools/             문제 검사 도구
 
 ## 사용한 외부 자료
 
-- 3D 모델: [KayKit](https://kaylousberg.itch.io/) Adventurers, Medieval Hexagon Pack (CC0)
+- 3D 모델: [KayKit](https://kaylousberg.itch.io/) Adventurers, Medieval Hexagon Pack, Dungeon Remastered(코인) (CC0)
 - 글꼴: 주아체 (SIL Open Font License)
 - 3D 라이브러리: three.js (MIT)
 

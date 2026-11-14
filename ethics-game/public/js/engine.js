@@ -225,7 +225,16 @@ export const engine = {
       convert(g.scene);
       for (const c of g.scene.children) this.assets.env[c.name] = c;
     });
-    await Promise.all([this.ensureChar(mine, 'char'), env]);
+    // 코인: 금빛이 살도록 스스로 빛나는 재질로 바꾼다
+    const coin = loader.loadAsync('assets/models/coin.glb').then((g) => {
+      g.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.material = new T.MeshToonMaterial({ color: 0xffd84a, gradientMap: toon, emissive: 0xffb300, emissiveIntensity: 0.16 });
+      });
+      this.assets.coin = g.scene;
+    });
+    await Promise.all([this.ensureChar(mine, 'char'), env, coin]);
     (async () => { for (const n of Object.keys(GEAR)) { try { await this.ensureChar(n); } catch (e) { delete this._charP[n]; } } })();
   },
   hasChar(name) { return !!this.assets.chars[name]; },
