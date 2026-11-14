@@ -24,8 +24,9 @@ async function board(users, cache) {
 }
 
 export default async (req) => {
-  const users = getStore('rank-users');
-  const cache = getStore('rank-cache');
+  // 방금 저장한 기록이 바로 조회되도록 즉시 반영 방식으로 연다
+  const users = getStore({ name: 'rank-users', consistency: 'strong' });
+  const cache = getStore({ name: 'rank-cache', consistency: 'strong' });
 
   if (req.method === 'POST') {
     let b;
