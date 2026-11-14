@@ -111,6 +111,10 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 #q-timer i { display: block; height: 100%; width: 100%; background: var(--green); transform-origin: left; }
 #q-timer.low i { background: var(--red); }
 
+#hud-best { position: absolute; left: 10px; bottom: calc(12px + var(--safe-b)); padding: 5px 11px; font-size: 14.5px; line-height: 1.35; border: 3px solid var(--line); border-radius: 14px; background: rgba(255,250,240,.92); box-shadow: 0 3px 0 var(--line); z-index: 3; }
+#hud-best b { font-weight: 400; font-size: 17px; }
+#hud-best .new { color: #e23a4b; }
+#hud-best.pop { animation: pop .3s; }
 #combo { position: absolute; right: 14px; top: 46%; font-size: 30px; color: var(--yellow); text-shadow: 0 3px 0 var(--line), 2px 0 0 var(--line), -2px 0 0 var(--line), 0 -2px 0 var(--line); opacity: 0; transition: opacity .2s; }
 #combo.on { opacity: 1; }
 #combo.pop { animation: pop .3s; }

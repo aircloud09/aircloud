@@ -74,6 +74,8 @@ function startGame(key) {
   $('home').classList.add('hidden');
   hud.show();
   const session = new Session();
+  hud.initBest(GAMES[key].icon, store.d.scores[key]);
+  api.top(key).then((r) => hud.setRankData(r)).catch(() => {});
   game = GAMES[key].create({ session, hud, onEnd: (info) => endGame(key, session, info) });
   engine.use(game.stage);
   sfx.music(true);

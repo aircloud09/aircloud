@@ -196,7 +196,7 @@ export function createSlash({ session, hud, onEnd }) {
     if (th.kind === 'answer') { if (answering) { th.dead = true; popOut(th, 0.15); resolve(th.opt, th); } return; }
     th.dead = true;
     if (th.kind === 'filler') {
-      sliced++; hud.setExtra('🗡️ ' + sliced);
+      sliced++; hud.setExtra('🗡️ ' + sliced); hud.setGameScore(sliced);
       combo++; hud.setCombo(combo); sfx.play('coin');
       engine.particles.emit(th.o.position, 16, { colors: ['#c98b4f', '#ffe9a8', '#fff'], speed: 4, up: 3, life: 0.6 });
       popOut(th, 0.12);

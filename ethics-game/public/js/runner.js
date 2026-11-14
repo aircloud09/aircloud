@@ -595,7 +595,7 @@ export function createRunner({ session, hud, onEnd }) {
       if (e.type === 'coin') {
         e.o.rotation.y += dt * 4.5; e.o.children[0].position.y = Math.sin(t0 * 4 + e.z * 0.4) * 0.08;
         if (Math.abs(e.z) < 0.75 && Math.abs(e.o.position.x - player.x) < LW * 0.48 && Math.abs(e.o.position.y - (player.y + 1)) < 1.25) {
-          coins++; hud.setExtra('🪙 ' + coins); sfx.play('coin');
+          coins++; hud.setExtra('🪙 ' + coins); hud.setGameScore(coins); sfx.play('coin');
           engine.particles.emit(e.o.position, 7, { colors: ['#ffd23c', '#fff3a8'], speed: 2.5, up: 3, life: 0.45, size: 0.8 });
           scene.remove(e.o); ents.splice(i, 1); continue;
         }

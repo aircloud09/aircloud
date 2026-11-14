@@ -23,6 +23,38 @@ export const hud = {
   },
   setScore(n) { $('hud-score').querySelector('b').textContent = n; },
   setExtra(t) { $('hud-extra').textContent = t; },
+
+  // 화면 구석의 최고 점수와 등수. 판을 하는 동안 기록을 넘으면 바로 갱신한다.
+  initBest(icon, best) {
+    this._best = { icon, stored: best, now: 0, others: null, serverRank: null };
+    this.drawBest();
+  },
+  // 서버 랭킹(해당 게임 점수 기준)을 받아 둔다
+  setRankData(r) {
+    if (!this._best || !r) return;
+    this._best.others = r.top.filter((e) => !e.me).map((e) => e.value);
+    this._best.serverRank = r.me ? r.me.rank : null;
+    this.drawBest();
+  },
+  setGameScore(n) {
+    if (!this._best) return;
+    const wasNew = this._best.now > this._best.stored;
+    this._best.now = n;
+    this.drawBest();
+    if (!wasNew && n > this._best.stored) { const el = $('hud-best'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  },
+  drawBest() {
+    const b = this._best, el = $('hud-best');
+    const high = Math.max(b.stored, b.now), isNew = b.now > b.stored && b.stored > 0;
+    let rank = '';
+    if (b.others && high > 0) {
+      const above = b.others.filter((v) => v > high).length;
+      // 상위 100명 안이면 바로 계산하고, 밖이면 서버가 알려 준 등수를 쓴다
+      const r = above < b.others.length || b.others.length < 100 ? above + 1 : b.serverRank;
+      if (r) rank = `<br>랭킹 <b>${r}위</b>`;
+    }
+    el.innerHTML = `${isNew ? '<span class="new">신기록!</span> ' : '최고 '}${b.icon} <b>${high}</b>${rank}`;
+  },
   setCombo(n) {
     const c = $('combo');
     if (n >= 2) { c.textContent = `${n} 콤보!`; c.classList.add('on'); c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } else c.classList.remove('on');

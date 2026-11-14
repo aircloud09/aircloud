@@ -224,7 +224,7 @@ export function createBattle({ session, hud, onEnd }) {
     if (f.hp <= 0) {
       f.ready = false;
       f.a.once('Death_A', null);
-      wins++; hud.setExtra('격파 ' + wins);
+      wins++; hud.setExtra('격파 ' + wins); hud.setGameScore(wins);
       sfx.play('win'); hero.once('Cheer', 'Idle');
       engine.wait(1.0, () => { poof(f.a.root.position, CONFETTI); scene.remove(f.a.root); if (foe === f) foe = null; drawFoePlate(); if (!over) spawnFoe(); });
     } else f.a.once('Hit_A', 'Idle');
