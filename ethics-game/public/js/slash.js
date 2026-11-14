@@ -1,8 +1,7 @@
 // 게임 B: 개념 슬래시
-// 물건이 계속 튀어 오르고, 손가락으로 그어서 벤다. 놓치면 체력이 깎인다.
-// 잠깐 베고 나면 게임이 멈추고 문제가 나온다.
-import { T, engine, Actor, makeSky, addLights, toonMat, glowMat, CONFETTI, sfx, disposeScene } from './engine.js';
-import { store } from './core.js';
+// 물건이 계속 튀어 오르고, 손가락으로 그어서 벤다. 문제가 나오면 정답 구슬만 베어야 한다.
+import { T, engine, Actor, makeSky, addLights, toonMat, glowMat, textSprite, CONFETTI, sfx, ease, disposeScene } from './engine.js';
+import { QRun, store, stepSlots } from './core.js';
 import { hexIsland, makeClouds, place } from './scenery.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -11,7 +10,9 @@ const FILLERS = [['crate_A_big', 3.6], ['crate_B_big', 3.6], ['barrel', 4], ['sa
 const GRAV = 6.2;
 const FIELD_W = 2.0;   // 구슬이 날아다니는 가로 반폭
 const PLANE_Z = 3;
-const GOD = new URLSearchParams(location.search).has('god'); // 테스트용: 놓쳐도 체력 유지
+const GOD = new URLSearchParams(location.search).has('god'); // 테스트용: 놓치거나 폭탄을 베도 체력 유지
+const ANSWER_G = 0.5;
+const WAVE = 4.2;      // 정답 구슬 묶음이 다시 올라오는 간격(초)
 
 export function createSlash({ session, hud, onEnd }) {
   const scene = new T.Scene();
@@ -46,13 +47,17 @@ export function createSlash({ session, hud, onEnd }) {
   island.add(actor.root);
 
   // 공용 형상
+  const orbGeo = new T.IcosahedronGeometry(0.46, 2);
+  const ringGeo = new T.TorusGeometry(0.62, 0.05, 8, 28);
   const bombGeo = new T.IcosahedronGeometry(0.42, 0);
   const bombMat = toonMat(0x2b2140, { emissive: 0xff2244, emissiveIntensity: 0.5 });
   const spikeMat = glowMat(0xff3355, 1.6);
 
   // 상태
   let lives = 3, combo = 0, sliced = 0, over = false, ended = false, t = 0;
-  let fillT = 1, bombT = 6, nextQ = 7, quizzing = false;
+  let run = null, step = null, slots = null, answering = false;
+  let readLeft = 0, waveLeft = 0, wavesLeft = 0, stepMax = 1, stepLeft = 0;
+  let fillT = 1, bombT = 6, nextQ = 1.2;
   const things = [];
   hud.setHearts(lives); hud.setScore(0); hud.setExtra('🗡️ 0');
 
@@ -67,11 +72,12 @@ export function createSlash({ session, hud, onEnd }) {
 
   function toss(o, kind, extra = {}) {
     const x = extra.x ?? rnd(-FIELD_W, FIELD_W);
-    const apex = extra.apex ?? rnd(2.0, 5.2);          // 도달할 최고 높이(월드 y)
+    const apex = extra.apex ?? rnd(1.4, 4.0);          // 도달할 최고 높이(월드 y)
     const y0 = -2.6;
-    const vy = Math.sqrt(2 * GRAV * (apex - y0));
+    const gk = kind === 'answer' ? ANSWER_G : 1;       // 정답 구슬은 천천히 움직여 읽을 시간을 준다
+    const vy = Math.sqrt(2 * GRAV * gk * (apex - y0));
     const th = { o, kind, r: extra.r ?? 0.55, vel: new T.Vector3((extra.tx ?? rnd(-FIELD_W, FIELD_W)) - x, vy, 0), spin: new T.Vector3(rnd(-3, 3), rnd(-3, 3), rnd(-3, 3)), dead: false, ...extra };
-    th.vel.x /= (2 * vy) / GRAV;                       // 떠 있는 동안 tx까지 이동
+    th.vel.x /= (2 * vy) / (GRAV * gk);                       // 떠 있는 동안 tx까지 이동
     if (extra.still) th.vel.x = 0;
     o.position.set(x, y0, PLANE_Z);
     scene.add(o);
@@ -81,7 +87,7 @@ export function createSlash({ session, hud, onEnd }) {
   function tossFiller() {
     const [name, s] = pick(FILLERS);
     const o = engine.prop(name, s);
-    toss(o, 'filler');
+    toss(o, 'filler', { free: answering });
   }
   function tossBomb() {
     const g = new T.Group();
@@ -95,28 +101,45 @@ export function createSlash({ session, hud, onEnd }) {
     toss(g, 'bomb', { r: 0.5 });
     sfx.play('tick');
   }
-  // 게임을 멈추고 문제를 낸다. 풀고 나면 다시 벤다.
-  function askQuestion() {
-    quizzing = true;
-    engine.paused = true;
-    last = null; trail.length = 0;
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
-    const q = session.next();
-    hud.quiz(q, (ok) => {
-      engine.paused = false; quizzing = false;
-      session.record(q, ok);
-      hud.setScore(session.correct);
-      hud.flash(ok);
-      if (ok) {
-        engine.particles.emit(new T.Vector3(0, 3, PLANE_Z), 50, { colors: CONFETTI, speed: 5, up: 5, life: 1.0 });
-        actor.once('Cheer', 'Idle', { speed: 1.4 });
-      } else {
-        combo = 0; hud.setCombo(0); engine.shake(0.35);
-        actor.once('Hit_A', 'Idle'); actor.flash();
-        hurt();
-      }
-      nextQ = rnd(7, 10);
+  function tossAnswers() {
+    const { n, opts, colors, labels, short } = slots;
+    const order = [...Array(n).keys()].sort(() => Math.random() - 0.5);
+    const span = Math.min(3.1, (n - 1) * 1.15);
+    order.forEach((slot, k) => {
+      const o = opts[slot];
+      if (!o) return;
+      const g = new T.Group();
+      const orb = new T.Mesh(orbGeo, glowMat(colors[slot], 1.15)); g.add(orb);
+      const ring = new T.Mesh(ringGeo, glowMat('#ffffff', 1.3)); g.add(ring);
+      const s = textSprite(labels[slot], { w: 256, h: 256, size: short ? [0, 120, 110, 76, 56][labels[slot].length] || 56 : 170, color: '#fff', stroke: 'rgba(0,0,0,.4)', scale: 0.8 });
+      s.position.z = 0.6; s.renderOrder = 5; g.add(s);
+      const x = n === 1 ? 0 : -span / 2 + (span * k) / (n - 1);
+      toss(g, 'answer', { x, still: true, apex: rnd(2.4, 3.3), r: 0.55, opt: o, slot, color: colors[slot], noSpin: true, ring });
     });
+    sfx.play('gate');
+  }
+
+  function readTime(first) {
+    let chars = (step.sub || '').length;
+    if (first || step.passage) chars += step.prompt.length;
+    if (first && step.passage) chars += step.passage.length;
+    if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
+    return Math.max(first ? 2.4 : 1.4, Math.min(10, (first ? 1.6 : 1.0) + chars * 0.07));
+  }
+  function startStep(first, quick = false) {
+    step = run.step;
+    slots = stepSlots(step);
+    answering = true;
+    readLeft = quick ? 0.8 : readTime(first);
+    wavesLeft = 2; waveLeft = 0;
+    stepMax = stepLeft = readLeft + wavesLeft * WAVE;
+    const hint = step.kind === 'ox' ? '맞으면 O 구슬, 틀리면 X 구슬을 베세요'
+      : step.kind === 'tf' ? '옳으면 초록, 틀리면 빨강 구슬을 베세요'
+        : '정답 구슬만 베세요 (다른 물건은 계속 베어도 됩니다)';
+    hud.showQuestion(run.q, step, { opts: true, hint });
+  }
+  function clearAnswers(exceptSlot = -1) {
+    for (const th of things) if (th.kind === 'answer' && !th.dead && th.slot !== exceptSlot) { th.dead = true; popOut(th, 0.2); }
   }
   function popOut(th, dur) {
     const s0 = th.o.scale.x;
@@ -127,11 +150,43 @@ export function createSlash({ session, hud, onEnd }) {
     const i = things.indexOf(th); if (i >= 0) things.splice(i, 1);
   }
 
+  function resolve(opt, th) {
+    if (!answering) return;
+    answering = false;
+    const res = run.answer(opt);
+    const cs = slots.opts.findIndex((o) => o && o.correct);
+    hud.markOption(cs, 'right');
+    hud.flash(res.ok);
+    if (res.ok) {
+      combo++; hud.setCombo(combo); sfx.play('correct');
+      engine.particles.emit(th.o.position, 44, { colors: CONFETTI, speed: 5, up: 4, life: 0.9 });
+      actor.once(combo % 5 === 0 ? 'Cheer' : '1H_Melee_Attack_Slice_Horizontal', 'Idle', { speed: 1.4 });
+      clearAnswers();
+    } else {
+      combo = 0; hud.setCombo(0); sfx.play('wrong'); engine.shake(0.35);
+      actor.once('Hit_A', 'Idle'); actor.flash();
+      clearAnswers(cs);   // 정답 구슬은 잠깐 남겨서 보여 준다
+      for (const a of things) if (a.kind === 'answer' && a.slot === cs && !a.dead) { a.dead = true; a.vel.set(0, 1.5, 0); engine.wait(0.8, () => popOut(a, 0.25)); }
+    }
+    if (res.done) engine.wait(res.ok ? 0.3 : 0.9, finishQuestion);
+    else engine.wait(res.ok ? 0.35 : 1.0, () => { if (!over && run) startStep(false); });
+  }
+  function finishQuestion() {
+    if (!run) return;
+    const ok = run.allOk, q = run.q;
+    session.record(q, ok);
+    hud.setScore(session.correct);
+    hud.toast(ok, q, ok ? 1300 : 3800);
+    hud.clearQuestion();
+    run = null;
+    if (!ok) hurt();
+    nextQ = ok ? 2.4 : 4.2;   // 다음 문제 전까지는 물건만 벤다
+  }
   function hurt() {
     lives--; hud.setHearts(lives);
     if (lives <= 0) {
-      over = true;
-      sfx.play('lose'); actor.once('Death_A', null);
+      over = true; answering = false;
+      sfx.play('lose'); actor.once('Death_A', null); hud.clearQuestion();
       engine.wait(2.2, finish);
     }
   }
@@ -139,6 +194,7 @@ export function createSlash({ session, hud, onEnd }) {
 
   function slice(th) {
     if (th.dead || over) return;
+    if (th.kind === 'answer') { if (answering) { th.dead = true; popOut(th, 0.15); resolve(th.opt, th); } return; }
     th.dead = true;
     if (th.kind === 'filler') {
       sliced++; hud.setExtra('🗡️ ' + sliced); hud.setGameScore(sliced);
@@ -150,7 +206,7 @@ export function createSlash({ session, hud, onEnd }) {
       engine.particles.emit(th.o.position, 30, { colors: ['#ff3355', '#2b2140', '#ffc93c'], speed: 6, up: 4, life: 0.7 });
       actor.once('Hit_A', 'Idle'); actor.flash();
       popOut(th, 0.1);
-      hurt();
+      if (!GOD) hurt();
     }
   }
 
@@ -179,8 +235,9 @@ export function createSlash({ session, hud, onEnd }) {
     trail.push({ x: e.clientX, y: e.clientY, t });
   };
   const onUp = (e) => { if (last && e.pointerId === last.id) { last = null; trail.push(null); } };
-  // 키보드(테스트/PC): 스페이스 = 아무 물건
+  // 키보드(테스트/PC): 숫자 = 해당 번호 구슬, 스페이스 = 아무 물건
   const onKey = (e) => {
+    if (e.key >= '1' && e.key <= '4') { const th = things.find((a) => a.kind === 'answer' && !a.dead && a.slot === Number(e.key) - 1); if (th) slice(th); }
     if (e.key === ' ') { const th = things.find((a) => a.kind === 'filler' && !a.dead); if (th) slice(th); }
   };
   addEventListener('pointerdown', onDown); addEventListener('pointermove', onMove);
@@ -194,26 +251,47 @@ export function createSlash({ session, hud, onEnd }) {
     clouds.update(dt);
     actor.update(dt);
 
-    if (!over && !quizzing) {
-      // 물건은 쉬지 않고 올라온다
+    if (!over) {
+      // 물건은 쉬지 않고 올라온다(문제를 읽는 동안에도)
       const hard = Math.min(1, session.count / 14);
       fillT -= dt;
-      if (fillT <= 0) { tossFiller(); if (Math.random() < 0.2 + hard * 0.2) tossFiller(); fillT = rnd(0.75, 1.15) - hard * 0.3; }
+      if (fillT <= 0) { tossFiller(); if (Math.random() < 0.35) tossFiller(); fillT = rnd(0.55, 0.95) - hard * 0.2 + (answering && readLeft <= 0 ? 0.35 : 0); }
       bombT -= dt;
       if (bombT <= 0) { tossBomb(); bombT = rnd(3.2, 6) - hard * 1.5; }
-      nextQ -= dt;
-      // 떠 있는 물건이 다 지나간 뒤에 문제를 낸다(문제 때문에 놓치는 일이 없도록)
-      if (nextQ <= 0) { fillT = 9; bombT = Math.max(bombT, 2); if (!things.length) askQuestion(); }
+      if (!run) {
+        nextQ -= dt;
+        if (nextQ <= 0) {
+          run = new QRun(session.next());
+          // 게임을 멈추고 문제를 먼저 읽게 한다. Ready!를 누르면 정답 구슬이 올라온다.
+          engine.paused = true; last = null; trail.length = 0;
+          hud.preview(run.q, () => { engine.paused = false; startStep(true, true); }, '누르면 정답 구슬이 올라옵니다. 물건은 계속 올라오니 같이 베세요.');
+        }
+      } else if (answering) {
+        stepLeft -= dt;
+        hud.timer(stepLeft / stepMax);
+        if (readLeft > 0) readLeft -= dt;
+        else {
+          waveLeft -= dt;
+          if (waveLeft <= 0) {
+            if (wavesLeft > 0) { wavesLeft--; waveLeft = WAVE; tossAnswers(); }
+            else { // 시간 초과
+              const dummy = { o: { position: new T.Vector3(0, 3, PLANE_Z) } };
+              resolve(null, dummy);
+            }
+          }
+        }
+      }
     }
 
     for (let i = things.length - 1; i >= 0; i--) {
       const th = things[i];
-      th.vel.y -= GRAV * dt;
+      th.vel.y -= GRAV * dt * (th.kind === 'answer' ? ANSWER_G : 1);
       th.o.position.addScaledVector(th.vel, dt);
       if (!th.noSpin) { th.o.rotation.x += th.spin.x * dt; th.o.rotation.y += th.spin.y * dt; th.o.rotation.z += th.spin.z * dt; }
+      if (th.ring) { th.ring.rotation.x += dt * 2; th.ring.rotation.y += dt * 1.3; }
       if (th.o.position.y < -3.2 && th.vel.y < 0) {
-        // 베지 못하고 떨어뜨린 물건은 체력을 깎는다(폭탄은 제외)
-        const missed = th.kind === 'filler' && !th.dead && !over && !GOD;
+        // 베지 못하고 떨어뜨린 물건은 체력을 깎는다(폭탄, 정답 구슬, 정답을 고르는 동안 올라온 물건은 제외)
+        const missed = th.kind === 'filler' && !th.dead && !th.free && !over && !GOD;
         removeThing(th);
         if (missed) { combo = 0; hud.setCombo(0); sfx.play('wrong'); hud.flash(false); engine.shake(0.25); hurt(); }
       }
@@ -240,6 +318,7 @@ export function createSlash({ session, hud, onEnd }) {
     camera.updateMatrixWorld();
   }
 
+  // 시간 흐름과 무관하게 answer 구슬은 천천히 떨어지도록(읽을 시간) 중력을 줄였다
   const stage = {
     scene, camera, sun, update,
     bloom: { strength: 0.4, threshold: 0.93, radius: 0.7 },
@@ -248,7 +327,7 @@ export function createSlash({ session, hud, onEnd }) {
       removeEventListener('pointerdown', onDown); removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onUp); removeEventListener('pointercancel', onUp);
       removeEventListener('keydown', onKey); removeEventListener('resize', sizeTrail);
-      bombGeo.dispose();
+      orbGeo.dispose(); ringGeo.dispose(); bombGeo.dispose();
       disposeScene(scene);
     },
   };

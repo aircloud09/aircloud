@@ -1,5 +1,5 @@
 // 게임 화면 위의 공용 UI(체력, 문제 패널, 피드백)
-import { TYPE_LABEL, answerText, stepSlots, QRun } from './core.js';
+import { TYPE_LABEL, answerText, stepSlots } from './core.js';
 import { sfx } from './engine.js';
 
 const $ = (id) => document.getElementById(id);
@@ -138,53 +138,25 @@ export const hud = {
     c.style.animationDuration = ms + 'ms';
     centerTimer = setTimeout(() => c.classList.remove('show'), ms);
   },
-  // 문제 풀이 창: 게임이 멈춘 상태에서 시간 제한 없이 푼다. 끝나면 done(맞혔는지)를 부른다.
-  quiz(q, done) {
-    const run = new QRun(q);
-    const box = $('ready'), body = $('ready-body'), btn = $('ready-btn');
-    $('ready-badges').innerHTML = `<span style="background:var(--blue);color:#fff">${TYPE_LABEL[q.type]}</span><span>Lv.${q.level}</span>${q.isReview ? '<span style="background:var(--purple);color:#fff">🔁 복습</span>' : ''}<span id="ready-prog" style="margin-left:auto;border:0;background:none;opacity:.6"></span>`;
+  // 문제가 나오면 게임을 멈추고 문제 전체를 먼저 보여 준다. Ready!를 누르면 onReady가 불린다.
+  preview(q, onReady, how) {
+    const it = (t) => `<div class="it">${esc(t)}</div>`;
+    let body = '';
+    if (q.type === 'ox') body = `<div class="stem">${esc(q.stem)}</div><div class="note">맞는 말인지 틀린 말인지 판단하세요.</div>`;
+    else if (q.type === 'choice') body = `<div class="stem">${esc(q.stem)}</div>${q.opts.map((o) => it(o.text)).join('')}`;
+    else if (q.type === 'multi') body = `<div class="stem">${esc(q.stem)}</div>${q.items.map((i) => it(i.text)).join('')}<div class="note">한 문장씩 차례로 옳은지 틀린지 고릅니다.</div>`;
+    else if (q.type === 'classify') body = `<div class="stem">${esc(q.stem)}</div><div class="cap">분류할 곳</div><div class="chips">${q.buckets.map((b) => `<span>${esc(b)}</span>`).join('')}</div><div class="cap">분류할 내용 (하나씩 차례로 나옵니다)</div>${q.items.map((i) => it(i.text)).join('')}`;
+    else if (q.type === 'order') body = `<div class="stem">${esc(q.stem)}</div><div class="chips">${q.shown.map((t) => `<span>${esc(t)}</span>`).join('')}</div><div class="note">첫 번째부터 차례로 고릅니다.</div>`;
+    else if (q.type === 'passage') body = `<div class="pass">${esc(q.passage)}</div><div class="stem">${esc(q.who.stem || '이 주장을 한 사상가는?')}</div><div class="chips">${q.who.opts.map((o) => `<span>${esc(o.text)}</span>`).join('')}</div><div class="cap">이어지는 질문: ${esc(q.then.stem)}</div>${q.then.opts.map((o) => it(o.text)).join('')}`;
+    $('ready-badges').innerHTML = `<span style="background:var(--blue);color:#fff">${TYPE_LABEL[q.type]}</span><span>Lv.${q.level}</span>${q.isReview ? '<span style="background:var(--purple);color:#fff">🔁 복습</span>' : ''}`;
+    $('ready-body').innerHTML = body + `<div class="note">시간 제한 없이 읽고, 준비되면 Ready!를 누르세요. ${esc(how || '')}</div>`;
+    const box = $('ready');
     box.classList.remove('hidden');
+    box.firstElementChild.scrollTop = 0;
     this.clearQuestion();
-    const COL = ['#ff5d6c', '#35d07f', '#4aa8ff', '#ffc93c'];
-    const finish = () => {
-      const ok = run.allOk;
-      sfx.play(ok ? 'correct' : 'wrong');
-      body.innerHTML = `<div class="res ${ok ? 'ok' : 'no'}">${ok ? '정답!' : '오답'}</div>${ok ? '' : `<div class="ans">정답: ${esc(answerText(q))}</div>`}<div class="exp">${esc(q.explanation || '')}</div>`;
-      $('ready-prog').textContent = '';
-      btn.style.display = ''; btn.textContent = '계속하기';
-      btn.onclick = () => { sfx.play('click'); box.classList.add('hidden'); done(ok); };
-      box.firstElementChild.scrollTop = 0;
-    };
-    const head = (step) => `${step.passage ? `<div class="pass">${esc(step.passage)}</div>` : ''}<div class="stem">${esc(step.prompt)}</div>${step.chain && step.chain.length ? `<div class="chain">${step.chain.map((t) => `<b>${esc(t)}</b>`).join('→')} →</div>` : ''}${step.sub ? `<div class="subq">${esc(step.sub)}</div>` : ''}`;
-    const showMulti = () => {
-      // 모두 고르기: 옳은 것을 전부 고른 뒤 한 번에 확인
-      const sel = new Set();
-      body.innerHTML = `<div class="stem">${esc(q.stem)}</div><div class="opts">${run.steps.map((st, i) => `<button class="opt" data-i="${i}">${esc(st.sub)}</button>`).join('')}</div><div class="note">옳은 것을 모두 고르고 확인을 누르세요.</div>`;
-      body.querySelectorAll('.opt').forEach((b) => { b.onclick = () => { const i = Number(b.dataset.i); sfx.play('click'); if (sel.has(i)) sel.delete(i); else sel.add(i); b.classList.toggle('sel', sel.has(i)); }; });
-      btn.style.display = ''; btn.textContent = '확인';
-      btn.onclick = () => { run.steps.slice().forEach((st, i) => run.answer(sel.has(i) ? st.options[0] : st.options[1])); finish(); };
-    };
-    const showStep = () => {
-      const step = run.step;
-      const { opts, colors } = stepSlots(step);
-      $('ready-prog').textContent = step.total > 1 ? `${step.index + 1} / ${step.total}` : '';
-      const label = (o) => (step.kind === 'ox' ? (o.text === 'O' ? '⭕ 맞는 말이다' : '❌ 틀린 말이다') : esc(o.text));
-      const grid = opts.every((o) => !o || o.text.length <= 8);
-      body.innerHTML = head(step) + `<div class="opts ${grid ? 'grid' : ''}">${opts.map((o, i) => (o ? `<button class="opt" data-i="${i}"><span class="k" style="background:${colors[i]}">${i + 1}</span>${label(o)}</button>` : '')).join('')}</div>`;
-      btn.style.display = 'none';
-      const btns = [...body.querySelectorAll('.opt')];
-      let locked = false;
-      btns.forEach((b) => { b.onclick = () => {
-        if (locked) return;
-        locked = true;
-        const res = run.answer(opts[Number(b.dataset.i)]);
-        btns.forEach((x) => { const o = opts[Number(x.dataset.i)]; x.disabled = true; x.classList.add(o.correct ? 'right' : x === b ? 'wrong' : 'dim'); });
-        if (!res.done) sfx.play(res.ok ? 'tick' : 'wrong');
-        setTimeout(() => { if (box.classList.contains('hidden')) return; if (res.done) finish(); else showStep(); }, res.done ? 450 : res.ok ? 450 : 900);
-      }; });
-      box.firstElementChild.scrollTop = 0;
-    };
-    if (q.type === 'multi') showMulti(); else showStep();
+    const btn = $('ready-btn');
+    btn.style.display = ''; btn.textContent = 'Ready!';
+    btn.onclick = () => { sfx.play('go'); box.classList.add('hidden'); onReady(); };
   },
   hidePreview() { $('ready').classList.add('hidden'); },
   esc,

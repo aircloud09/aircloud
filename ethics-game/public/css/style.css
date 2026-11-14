@@ -134,7 +134,7 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 #flash.no { animation: fl .45s; background: radial-gradient(transparent 40%, rgba(255,60,80,.6)); }
 @keyframes fl { 0% { opacity: 1; } 100% { opacity: 0; } }
 
-/* 문제 풀이 창 (게임이 멈춘 상태) */
+/* 어려운 문제 미리 읽기 */
 #ready { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(30,20,60,.5); backdrop-filter: blur(2px); pointer-events: auto !important; }
 .ready-sheet { width: 100%; max-width: 480px; max-height: 92%; overflow-y: auto; touch-action: pan-y; padding: 14px 14px 16px; border: 3px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: 0 6px 0 var(--line); animation: drop .25s cubic-bezier(.2,1.4,.4,1); }
 .ready-sheet .hard { background: var(--red); color: #fff; }
@@ -146,15 +146,6 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 #ready-body .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 #ready-body .chips span { padding: 4px 11px; border: 2px solid var(--line); border-radius: 999px; background: #fff7d6; font-size: 16px; }
 #ready-body .note { font-size: 13.5px; color: #6a5d86; margin-top: 8px; }
-#ready-body .chain { margin-bottom: 8px; font-size: 15px; color: #6a5d86; }
-#ready-body .chain b { font-weight: 400; color: var(--ink); background: #e9f9ef; border: 2px solid var(--green); border-radius: 8px; padding: 1px 6px; margin: 0 2px; display: inline-block; }
-#ready-body .subq { margin-bottom: 12px; padding: 10px; text-align: center; font-size: 22px; line-height: 1.25; border: 3px dashed var(--line); border-radius: 14px; background: #fff7d6; word-break: keep-all; }
-#ready-body .opts { display: flex; flex-direction: column; gap: 9px; }
-#ready-body .opts.grid { display: grid; grid-template-columns: 1fr 1fr; }
-#ready-body .res { font-size: 34px; text-align: center; margin: 6px 0 8px; }
-#ready-body .res.ok { color: #129a55; } #ready-body .res.no { color: #e23a4b; }
-#ready-body .ans { color: #129a55; font-size: 16.5px; line-height: 1.4; margin-bottom: 6px; font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; font-weight: 700; word-break: keep-all; }
-#ready-body .exp { font-size: 16px; line-height: 1.45; font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; font-weight: 600; word-break: keep-all; }
 
 /* 게임별 UI */
 #game-ui { position: absolute; inset: 0; }
