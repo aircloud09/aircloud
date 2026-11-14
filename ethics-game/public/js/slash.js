@@ -53,12 +53,12 @@ export function createSlash({ session, hud, onEnd }) {
   const spikeMat = glowMat(0xff3355, 1.6);
 
   // 상태
-  let lives = 3, combo = 0, over = false, ended = false, t = 0;
+  let lives = 3, combo = 0, sliced = 0, over = false, ended = false, t = 0;
   let run = null, step = null, slots = null, answering = false;
   let readLeft = 0, waveLeft = 0, wavesLeft = 0, stepMax = 1, stepLeft = 0;
   let fillT = 1, bombT = 6, nextQ = 1.2;
   const things = [];
-  hud.setHearts(lives); hud.setScore(0);
+  hud.setHearts(lives); hud.setScore(0); hud.setExtra('🗡️ 0');
 
   // 베는 궤적(2D 캔버스)
   const cv = document.createElement('canvas');
@@ -189,13 +189,14 @@ export function createSlash({ session, hud, onEnd }) {
       engine.wait(2.2, finish);
     }
   }
-  function finish() { if (!ended) { ended = true; onEnd({}); } }
+  function finish() { if (!ended) { ended = true; onEnd({ score: sliced, extra: `벤 물건 ${sliced}개` }); } }
 
   function slice(th) {
     if (th.dead || over) return;
     if (th.kind === 'answer') { if (answering) { th.dead = true; popOut(th, 0.15); resolve(th.opt, th); } return; }
     th.dead = true;
     if (th.kind === 'filler') {
+      sliced++; hud.setExtra('🗡️ ' + sliced);
       combo++; hud.setCombo(combo); sfx.play('coin');
       engine.particles.emit(th.o.position, 16, { colors: ['#c98b4f', '#ffe9a8', '#fff'], speed: 4, up: 3, life: 0.6 });
       popOut(th, 0.12);

@@ -10,9 +10,9 @@ import { createBattle } from './battle.js';
 const $ = (id) => document.getElementById(id);
 const esc = hud.esc;
 const GAMES = {
-  runner: { name: '지식 러너', create: createRunner },
-  slash: { name: '개념 슬래시', create: createSlash },
-  battle: { name: '논쟁 배틀', create: createBattle },
+  runner: { name: '지식 러너', create: createRunner, unit: '코인', icon: '🪙' },
+  slash: { name: '개념 슬래시', create: createSlash, unit: '벤 물건', icon: '🗡️' },
+  battle: { name: '논쟁 배틀', create: createBattle, unit: '격파', icon: '⚔️' },
 };
 let lobby = null, game = null, modalOnClose = null;
 
@@ -38,7 +38,7 @@ function refreshHome() {
   $('nick-text').textContent = d.nickname || '닉네임 설정';
   $('stat-correct').textContent = d.correct;
   $('stat-review').textContent = Object.values(d.srs).filter((s) => s.due <= d.solved).length;
-  for (const k of Object.keys(GAMES)) $('best-' + k).textContent = d.best[k] ? `최고 ${d.best[k]}` : '';
+  for (const k of Object.keys(GAMES)) $('best-' + k).textContent = d.scores[k] ? `${GAMES[k].icon} ${d.scores[k]}` : '';
   api.top().then((r) => { $('stat-rank').textContent = r.me && r.me.rank ? r.me.rank + '위' : '-'; }).catch(() => { $('stat-rank').textContent = '-'; });
 }
 function showHome() {
@@ -83,8 +83,10 @@ function endGame(key, session, info = {}) {
   game = null;
   sfx.music(false);
   const d = store.d;
-  const isBest = session.correct > d.best[key];
-  if (isBest) d.best[key] = session.correct;
+  const score = Math.max(0, Math.floor(info.score || 0));
+  const isBest = score > d.scores[key];
+  if (isBest) d.scores[key] = score;
+  if (session.correct > d.best[key]) d.best[key] = session.correct;
   store.save();
   api.submit().then(refreshHome);
   showHome();
@@ -93,12 +95,12 @@ function endGame(key, session, info = {}) {
   const uniq = [...new Map(wrong.map((q) => [q.id, q])).values()];
   const rate = session.count ? Math.round((session.correct / session.count) * 100) : 0;
   openModal(`
-    <h2>${GAMES[key].name} 결과${isBest && session.correct ? ' · 최고 기록!' : ''}</h2>
+    <h2>${GAMES[key].name} 결과${isBest ? ' · 최고 점수!' : ''}</h2>
     <div class="big-num">${session.correct}<small>문제 정답</small></div>
     <div class="row-stats">
       <div><b>${session.count}</b><span>푼 문제</span></div>
       <div><b>${rate}%</b><span>정답률</span></div>
-      <div><b>${d.correct}</b><span>누적 정답</span></div>
+      <div><b>${score}</b><span>${GAMES[key].unit}</span></div>
     </div>
     ${info.extra ? `<p class="sub" style="text-align:center">${esc(info.extra)}</p>` : ''}
     <button class="btn primary" id="res-again">다시 하기</button>
@@ -129,19 +131,33 @@ function bindReports() {
 }
 
 // ---------- 랭킹 ----------
-async function showRank() {
-  openModal('<h2>🏆 랭킹</h2><p class="sub">맞힌 문제 수(누적) 기준입니다.</p><div class="empty">불러오는 중…</div>');
+const RANK_TABS = [
+  ['total', '정답', '문제', '맞힌 문제 수 (누적)'], ['solved', '푼 문제', '문제', '푼 문제 수 (누적)'],
+  ['runner', '🪙 코인', '개', '지식 러너에서 한 판에 모은 코인 최고 기록'], ['slash', '🗡️ 베기', '개', '개념 슬래시에서 한 판에 벤 물건 최고 기록'], ['battle', '⚔️ 격파', '명', '논쟁 배틀에서 한 판에 격파한 상대 최고 기록'],
+];
+async function showRank(sort = 'total') {
+  const tab = RANK_TABS.find((t) => t[0] === sort);
+  const head = `<h2>🏆 랭킹</h2>${seg('rank', RANK_TABS.map(([v, l]) => [v, l]), sort)}
+    <p class="sub" style="margin-top:10px">${tab[3]}</p>`;
+  const draw = (body) => {
+    if ($('modal').classList.contains('hidden')) return;
+    $('modal-body').innerHTML = head + body;
+    $('modal-body').querySelector('[data-seg="rank"]').onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      sfx.play('click'); showRank(b.dataset.v);
+    };
+  };
+  openModal('');
+  draw('<div class="empty">불러오는 중…</div>');
   try {
     await api.submit();
-    const r = await api.top();
+    const r = await api.top(sort);
     const medal = ['🥇', '🥈', '🥉'];
-    const rows = r.top.map((e, i) => `<li class="${e.me ? 'me' : ''}"><span class="r">${medal[i] || i + 1}</span><span class="n">${esc(e.nickname)}</span><span class="c">${e.total}문제</span></li>`).join('');
-    const mine = r.me && r.me.rank ? `<p>내 순위: <b>${r.me.rank}위</b> (${r.me.total}문제)</p>` : '<p class="sub">문제를 맞히면 순위에 올라갑니다.</p>';
-    if (!$('modal').classList.contains('hidden')) {
-      $('modal-body').innerHTML = `<h2>🏆 랭킹</h2><p class="sub">맞힌 문제 수(누적) 기준입니다.</p>${mine}${rows ? `<ul class="rank-list">${rows}</ul>` : '<div class="empty">아직 기록이 없습니다.</div>'}`;
-    }
+    const rows = r.top.map((e, i) => `<li class="${e.me ? 'me' : ''}"><span class="r">${medal[i] || i + 1}</span><span class="n">${esc(e.nickname)}</span><span class="c">${e.value}${tab[2]}</span></li>`).join('');
+    const mine = r.me && r.me.rank ? `<p>내 순위: <b>${r.me.rank}위</b> (${r.me.value}${tab[2]})</p>` : '<p class="sub">아직 이 항목의 기록이 없습니다.</p>';
+    draw(`${mine}${rows ? `<ul class="rank-list">${rows}</ul>` : '<div class="empty">아직 기록이 없습니다.</div>'}`);
   } catch (e) {
-    $('modal-body').innerHTML = '<h2>🏆 랭킹</h2><div class="empty">랭킹 서버에 연결할 수 없습니다.<br>잠시 뒤에 다시 시도해 주세요.</div>';
+    draw('<div class="empty">랭킹 서버에 연결할 수 없습니다.<br>잠시 뒤에 다시 시도해 주세요.</div>');
   }
 }
 
@@ -215,7 +231,7 @@ async function boot() {
   setTimeout(() => $('loading').classList.add('hidden'), 450);
 
   document.querySelectorAll('.game-card').forEach((b) => { b.onclick = () => startGame(b.dataset.game); });
-  $('btn-rank').onclick = () => { sfx.unlock(); sfx.play('click'); showRank(); };
+  $('btn-rank').onclick = () => { sfx.unlock(); sfx.play('click'); showRank('total'); };
   $('btn-notes').onclick = () => { sfx.unlock(); sfx.play('click'); showNotes(); };
   $('btn-settings').onclick = () => { sfx.unlock(); sfx.play('click'); showSettings(); };
   $('btn-nick').onclick = () => { sfx.unlock(); sfx.play('click'); askNickname(false); };

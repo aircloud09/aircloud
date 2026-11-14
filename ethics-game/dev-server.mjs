@@ -20,17 +20,21 @@ http.createServer(async (req, res) => {
     if (req.method === 'POST') {
       try {
         const b = JSON.parse(await readBody(req));
-        const prev = ranks.get(b.uid);
-        ranks.set(b.uid, { nickname: String(b.nickname).slice(0, 10), total: Math.max(prev ? prev.total : 0, Number(b.total) || 0) });
+        const prev = ranks.get(b.uid) || { total: 0, solved: 0, scores: {} };
+        const scores = {};
+        for (const g of ['runner', 'slash', 'battle']) scores[g] = Math.max(prev.scores[g] || 0, Number(b.scores && b.scores[g]) || 0);
+        ranks.set(b.uid, { nickname: String(b.nickname).slice(0, 10), total: Math.max(prev.total, Number(b.total) || 0), solved: Math.max(prev.solved, Number(b.solved) || 0), scores });
         return json(res, 200, { ok: true });
       } catch (e) { return json(res, 400, { error: 'bad request' }); }
     }
-    const uid = url.searchParams.get('uid');
-    const all = [...ranks.entries()].map(([id, v]) => ({ id, ...v })).filter((e) => e.total > 0).sort((a, b) => b.total - a.total);
+    const uid = url.searchParams.get('uid'), sort = url.searchParams.get('sort') || 'total';
+    const val = (v) => (v.scores[sort] !== undefined ? v.scores[sort] : v[sort]) || 0;
+    const all = [...ranks.entries()].map(([id, v]) => ({ id, nickname: v.nickname, value: val(v) })).filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
     const idx = all.findIndex((e) => e.id === uid);
     return json(res, 200, {
-      top: all.slice(0, 100).map((e) => ({ nickname: e.nickname, total: e.total, me: e.id === uid })),
-      me: idx >= 0 ? { rank: idx + 1, total: all[idx].total } : null,
+      sort,
+      top: all.slice(0, 100).map((e) => ({ nickname: e.nickname, value: e.value, me: e.id === uid })),
+      me: idx >= 0 ? { rank: idx + 1, value: all[idx].value } : null,
     });
   }
   if (url.pathname === '/api/report' && req.method === 'POST') {

@@ -28,6 +28,8 @@ const DEFAULTS = () => ({
   uid: uid(), nickname: '', solved: 0, correct: 0,
   level: 2, fixedLevel: 0, srs: {}, seen: [],
   best: { runner: 0, slash: 0, battle: 0 },
+  // 게임별 최고 점수(한 판 기준): 러너=코인, 슬래시=벤 물건, 배틀=격파한 상대
+  scores: { runner: 0, slash: 0, battle: 0 },
   opts: { sound: true, music: true, quality: 'auto', char: 'knight' },
 });
 
@@ -38,7 +40,7 @@ export const store = {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const p = JSON.parse(raw), def = DEFAULTS();
-        this.d = { ...def, ...p, best: { ...def.best, ...p.best }, opts: { ...def.opts, ...p.opts } };
+        this.d = { ...def, ...p, best: { ...def.best, ...p.best }, scores: { ...def.scores, ...p.scores }, opts: { ...def.opts, ...p.opts } };
       }
     } catch (e) { /* 저장소를 못 쓰는 환경에서도 동작 */ }
     this.save();
@@ -229,12 +231,12 @@ export const api = {
       await fetch('/api/rank', {
         method: 'POST', keepalive: true,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ uid: d.uid, nickname: d.nickname, total: d.correct }),
+        body: JSON.stringify({ uid: d.uid, nickname: d.nickname, total: d.correct, solved: d.solved, scores: d.scores }),
       });
     } catch (e) { /* 오프라인이면 다음에 다시 전송 */ }
   },
-  async top() {
-    const r = await fetch('/api/rank?uid=' + encodeURIComponent(store.d.uid));
+  async top(sort = 'total') {
+    const r = await fetch(`/api/rank?sort=${sort}&uid=${encodeURIComponent(store.d.uid)}`);
     if (!r.ok) throw new Error('rank ' + r.status);
     return r.json();
   },

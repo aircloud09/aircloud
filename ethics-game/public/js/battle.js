@@ -242,7 +242,7 @@ export function createBattle({ session, hud, onEnd }) {
     run = null;
     nextQ = ok ? 2.2 : 4.0;
   }
-  function finish() { if (!ended) { ended = true; onEnd({ extra: `격파한 상대 ${wins}명` }); } }
+  function finish() { if (!ended) { ended = true; onEnd({ score: wins, extra: `격파한 상대 ${wins}명` }); } }
 
   // ---------- 입력: 끌어서 이동 ----------
   const toWorldX = (cx) => Math.max(-FW, Math.min(FW, ((cx / innerWidth) - 0.5) * 2 * FW * 1.3));

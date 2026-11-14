@@ -451,7 +451,7 @@ export function createRunner({ session, hud, onEnd }) {
   function finish() {
     if (ended) return;
     ended = true;
-    onEnd({ extra: `모은 코인 ${coins}개 · 달린 거리 ${Math.round(dist)}m` });
+    onEnd({ score: coins, extra: `모은 코인 ${coins}개 · 달린 거리 ${Math.round(dist)}m` });
   }
 
   // 해당 레인에서 플레이어 위치(z=0)에 있는 수레/경사로를 살핀다
