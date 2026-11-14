@@ -68,16 +68,17 @@ export const hud = {
     const fresh = p.classList.contains('hidden') || p.dataset.qid !== q.id;
     p.dataset.qid = q.id;
     p.classList.remove('hidden');
+    p.classList.toggle('compact', !!cfg.compact);
     if (fresh) { p.style.animation = 'none'; void p.offsetWidth; p.style.animation = ''; }
     $('q-type').textContent = TYPE_LABEL[q.type];
     $('q-lv').textContent = 'Lv.' + q.level;
     $('q-review').style.display = q.isReview ? '' : 'none';
     $('q-prog').textContent = step.total > 1 ? `${step.index + 1} / ${step.total}` : '';
     const pass = $('q-passage');
-    pass.style.display = step.passage ? '' : 'none';
+    pass.style.display = step.passage && !cfg.compact ? '' : 'none';
     pass.textContent = step.passage || '';
     const prompt = $('q-prompt');
-    prompt.style.display = cfg.prompt === false ? 'none' : '';
+    prompt.style.display = cfg.prompt === false || cfg.compact ? 'none' : '';
     prompt.textContent = step.prompt;
     const chain = $('q-chain');
     chain.style.display = step.chain && step.chain.length ? '' : 'none';

@@ -63,7 +63,7 @@ export function createBattle({ session, hud, onEnd }) {
   // 상태
   // 점수 = 적에게 입힌 피해량 합계
   let lives = 4, wins = 0, dealt = 0, over = false, ended = false, t = 0;
-  let run = null, step = null, wave = null, nextQ = 2.2;
+  let run = null, step = null, wave = null, nextQ = 6;   // 첫 문제 전 6초, 문제 사이 10초 이상 피하기
   let px = 0, tx = 0, invuln = 0, fireT = 2, keyDir = 0;
   const balls = [];
   hud.setHearts(lives, 4); hud.setScore(0); hud.setExtra('💥 0 · 격파 0');
@@ -260,7 +260,7 @@ export function createBattle({ session, hud, onEnd }) {
     if (foe && foe.a.sil) { foe.a.setSilhouette(false); }
     if (foe) { foe.label = foe.base; drawFoePlate(); }
     run = null;
-    nextQ = ok ? 2.2 : 4.0;
+    nextQ = rnd(10, 12);
   }
   function finish() { if (!ended) { ended = true; onEnd({ score: dealt, extra: `입힌 피해 ${dealt} · 격파한 상대 ${wins}명` }); } }
 

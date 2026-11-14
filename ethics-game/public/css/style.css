@@ -107,6 +107,13 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 #q-opts .o.right { outline: 4px solid #fff; box-shadow: 0 0 0 7px var(--green); }
 #q-opts .o.wrong { opacity: .35; }
 #q-hint { margin-top: 7px; font-size: 14px; text-align: center; color: #6a5d86; }
+#qpanel.compact { padding: 6px 8px 8px; top: calc(48px + var(--safe-t)); }
+#qpanel.compact .q-badges { display: none; }
+#qpanel.compact #q-sub { margin-top: 0; padding: 5px 8px; font-size: 17px; }
+#qpanel.compact #q-opts { margin-top: 5px; }
+#qpanel.compact #q-opts .o { padding: 4px 6px; font-size: 14px; }
+#qpanel.compact #q-hint { display: none; }
+#qpanel.compact #q-timer { margin-top: 6px; }
 #q-timer { margin-top: 8px; height: 8px; border-radius: 6px; background: rgba(43,33,64,.14); overflow: hidden; }
 #q-timer i { display: block; height: 100%; width: 100%; background: var(--green); transform-origin: left; }
 #q-timer.low i { background: var(--red); }

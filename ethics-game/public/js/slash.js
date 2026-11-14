@@ -47,7 +47,7 @@ export function createSlash({ session, hud, onEnd }) {
   island.add(actor.root);
 
   // 공용 형상
-  const orbGeo = new T.IcosahedronGeometry(0.46, 2);
+  const orbGeo = new T.IcosahedronGeometry(0.42, 2);
   const ringGeo = new T.TorusGeometry(0.62, 0.05, 8, 28);
   const bombGeo = new T.IcosahedronGeometry(0.42, 0);
   const bombMat = toonMat(0x2b2140, { emissive: 0xff2244, emissiveIntensity: 0.5 });
@@ -57,7 +57,7 @@ export function createSlash({ session, hud, onEnd }) {
   let lives = 3, combo = 0, sliced = 0, over = false, ended = false, t = 0;
   let run = null, step = null, slots = null, answering = false;
   let readLeft = 0, waveLeft = 0, wavesLeft = 0, stepMax = 1, stepLeft = 0;
-  let fillT = 1, bombT = 6, nextQ = 1.2;
+  let fillT = 1, bombT = 6, nextQ = 6;   // 첫 문제 전 6초, 문제 사이 10초 이상 플레이
   const things = [];
   hud.setHearts(lives); hud.setScore(0); hud.setExtra('🗡️ 0');
 
@@ -104,7 +104,8 @@ export function createSlash({ session, hud, onEnd }) {
   function tossAnswers() {
     const { n, opts, colors, labels, short } = slots;
     const order = [...Array(n).keys()].sort(() => Math.random() - 0.5);
-    const span = Math.min(3.1, (n - 1) * 1.15);
+    const span = [0, 0, 2.6, 3.4, 3.8][n] || 3.8;
+    const lowH = 1.7, highH = 3.3;
     order.forEach((slot, k) => {
       const o = opts[slot];
       if (!o) return;
@@ -114,7 +115,9 @@ export function createSlash({ session, hud, onEnd }) {
       const s = textSprite(labels[slot], { w: 256, h: 256, size: short ? [0, 120, 110, 76, 56][labels[slot].length] || 56 : 170, color: '#fff', stroke: 'rgba(0,0,0,.4)', scale: 0.8 });
       s.position.z = 0.6; s.renderOrder = 5; g.add(s);
       const x = n === 1 ? 0 : -span / 2 + (span * k) / (n - 1);
-      toss(g, 'answer', { x, still: true, apex: rnd(2.4, 3.3), r: 0.55, opt: o, slot, color: colors[slot], noSpin: true, ring });
+      // 이웃한 구슬은 높이를 엇갈리게 해서 서로 붙지 않게 한다
+      const apex = n <= 2 ? 2.6 : (k % 2 ? highH : lowH);
+      toss(g, 'answer', { x, still: true, apex, r: 0.55, opt: o, slot, color: colors[slot], noSpin: true, ring });
     });
     sfx.play('gate');
   }
@@ -136,7 +139,8 @@ export function createSlash({ session, hud, onEnd }) {
     const hint = step.kind === 'ox' ? '맞으면 O 구슬, 틀리면 X 구슬을 베세요'
       : step.kind === 'tf' ? '옳으면 초록, 틀리면 빨강 구슬을 베세요'
         : '정답 구슬만 베세요 (다른 물건은 계속 베어도 됩니다)';
-    hud.showQuestion(run.q, step, { opts: true, hint });
+    // 문제는 Ready! 전에 이미 읽었으므로 작은 창에 보기만 보여 준다(물건이 가려지지 않게)
+    hud.showQuestion(run.q, step, { opts: true, hint, compact: true });
   }
   function clearAnswers(exceptSlot = -1) {
     for (const th of things) if (th.kind === 'answer' && !th.dead && th.slot !== exceptSlot) { th.dead = true; popOut(th, 0.2); }
@@ -180,7 +184,7 @@ export function createSlash({ session, hud, onEnd }) {
     hud.clearQuestion();
     run = null;
     if (!ok) hurt();
-    nextQ = ok ? 2.4 : 4.2;   // 다음 문제 전까지는 물건만 벤다
+    nextQ = rnd(10, 12);   // 다음 문제 전까지 최소 10초는 물건만 벤다
   }
   function hurt() {
     lives--; hud.setHearts(lives);
@@ -254,9 +258,11 @@ export function createSlash({ session, hud, onEnd }) {
     if (!over) {
       // 물건은 쉬지 않고 올라온다(문제를 읽는 동안에도)
       const hard = Math.min(1, session.count / 14);
-      fillT -= dt;
+      // 정답을 고르는 동안(Ready! 이후)에는 물건과 폭탄을 올리지 않는다
+      const calm = answering;
+      if (!calm) fillT -= dt;
       if (fillT <= 0) { tossFiller(); if (Math.random() < 0.35) tossFiller(); fillT = rnd(0.55, 0.95) - hard * 0.2 + (answering && readLeft <= 0 ? 0.35 : 0); }
-      bombT -= dt;
+      if (!calm) bombT -= dt;
       if (bombT <= 0) { tossBomb(); bombT = rnd(3.2, 6) - hard * 1.5; }
       if (!run) {
         nextQ -= dt;
