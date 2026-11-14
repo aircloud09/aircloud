@@ -72,4 +72,4 @@ tools/             문제 검사 도구
 
 ## 테스트용 주소 옵션
 
-`?play=runner|slash|battle` 바로 시작 · `?type=ox|choice|multi|classify|order|passage` 유형 고정 · `?lv=1~5` 레벨 고정 · `?q=high|mid|low` 그래픽 고정 · `?god` 러너 장애물 무시
+`?play=runner|slash|battle` 바로 시작 · `?type=ox|choice|multi|classify|order|passage` 유형 고정 · `?lv=1~5` 레벨 고정 · `?q=high|mid|low` 그래픽 고정 · `?god` 장애물·불덩이 무시 · `?auto` 배틀 자동 정답

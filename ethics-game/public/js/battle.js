@@ -49,6 +49,7 @@ export function createBattle({ session, hud, onEnd }) {
   const PZ = 3.4, EZ = -6.2;      // 플레이어 / 상대의 z 위치
   const rnd = (a, b) => a + Math.random() * (b - a);
   const GOD = new URLSearchParams(location.search).has('god'); // 테스트용: 불덩이 무시
+  const AUTO = new URLSearchParams(location.search).has('auto'); // 테스트용: 정답 구슬을 자동으로 받아침
 
   const hero = new Actor(store.d.opts.char);
   hero.root.scale.setScalar(0.9);
@@ -71,7 +72,7 @@ export function createBattle({ session, hud, onEnd }) {
   hud.ui.appendChild(foePlate);
   function drawFoePlate() {
     if (!foe) { foePlate.innerHTML = ''; return; }
-    foePlate.innerHTML = `<span>${esc(foe.label)}</span><div class="hp">${Array.from({ length: foe.max }, (_, i) => `<i class="${i < foe.hp ? '' : 'off'}"></i>`).join('')}</div>`;
+    foePlate.innerHTML = `<span>${esc(foe.label)}</span><div class="hpbar"><i style="width:${(foe.hp / foe.max) * 100}%"></i><b>${foe.hp} / ${foe.max}</b></div>`;
   }
 
   const ballGeo = new T.SphereGeometry(0.3, 12, 10);
@@ -81,9 +82,16 @@ export function createBattle({ session, hud, onEnd }) {
   const orbGeo = new T.IcosahedronGeometry(0.5, 1);
   const stripGeo = new T.PlaneGeometry(1, 1);
 
+  // 적 체력: 처음 6칸, 쓰러뜨릴 때마다 2칸씩 늘어나 최대 14칸
+  const foeHp = () => Math.min(14, 6 + wins * 2);
   async function spawnFoe() {
-    const name = foeOrder[foeIdx++ % foeOrder.length];
-    if (!engine.hasChar(name)) await engine.ensureChar(name);
+    // 다음 적 모델을 아직 내려받는 중이면 기다리지 않고 이미 받은 캐릭터로 낸다(게임이 멈추지 않도록)
+    let name = foeOrder[foeIdx++ % foeOrder.length];
+    if (!engine.hasChar(name)) {
+      engine.ensureChar(name);
+      name = foeOrder.find((n) => engine.hasChar(n)) || store.d.opts.char;
+      if (!engine.hasChar(name)) await engine.ensureChar(name);
+    }
     if (over) return;
     const a = new Actor(name);
     a.root.scale.setScalar(0.95);
@@ -91,7 +99,7 @@ export function createBattle({ session, hud, onEnd }) {
     a.root.position.copy(from);
     a.play('Walking_A', { speed: 1.4 });
     scene.add(a.root);
-    const hp = Math.min(5, 2 + wins);
+    const hp = foeHp();
     const f = { a, name, base: FOES[name], label: FOES[name], hp, max: hp, ready: false };
     foe = f;
     drawFoePlate();
@@ -171,7 +179,8 @@ export function createBattle({ session, hud, onEnd }) {
     const w = wave;
     let best = null, bd = 1e9;
     for (const o of w.orbs) { const d = Math.abs(o.x - px); if (d < bd) { bd = d; best = o; } }
-    const chosen = best && bd <= w.colW * 0.55 ? best : null;
+    let chosen = best && bd <= w.colW * 0.55 ? best : null;
+    if (AUTO) chosen = w.orbs.find((o) => o.opt.correct) || chosen; // 테스트용: 자동 정답
     const wasWho = step.isWho;
     const res = run.answer(chosen ? chosen.opt : null);
     // 문제의 마지막 단계까지 모두 맞혀야 상대 체력이 깎인다(여러 단계 문제는 2칸)
