@@ -144,7 +144,13 @@ export function createBattle({ session, hud, onEnd }) {
     if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
     return Math.max(first ? 3.8 : 2.8, Math.min(13, (first ? 2.8 : 2.0) + chars * 0.075));
   }
+  // 날아오던 불덩이를 모두 없앤다(정답을 고르는 동안 맞지 않도록)
+  function clearBalls() {
+    for (const b of balls) { engine.particles.emit(b.m.position, 6, { colors: ['#ffb040', '#fff'], speed: 2, up: 2, life: 0.4 }); scene.remove(b.m); scene.remove(b.mark); }
+    balls.length = 0;
+  }
   function startStep(first, quick = false) {
+    clearBalls();
     step = run.step;
     const sl = stepSlots(step);
     const colW = Math.min(1.5, (FW * 2) / sl.n);
@@ -177,6 +183,7 @@ export function createBattle({ session, hud, onEnd }) {
     wave = null;
   }
   function resolveWave() {
+    fireT = Math.max(fireT, 1.4); // 답한 직후 잠깐 숨 돌릴 틈
     const w = wave;
     let best = null, bd = 1e9;
     for (const o of w.orbs) { const d = Math.abs(o.x - px); if (d < bd) { bd = d; best = o; } }
@@ -303,10 +310,11 @@ export function createBattle({ session, hud, onEnd }) {
       // 불덩이는 문제를 읽는 동안에도 계속 날아온다
       const hard = Math.min(1, wins / 4 + session.count / 30);
       fireT -= dt;
-      if (fireT <= 0 && foe && foe.ready) {
+      // 정답 구슬이 다가오는 동안에는 공격하지 않는다
+      if (fireT <= 0 && foe && foe.ready && !wave) {
         if (Math.random() < 0.15 + hard * 0.25) { for (const d of [-1.3, 0, 1.3]) fire(Math.max(-FW, Math.min(FW, px + d))); }
         else fire(Math.max(-FW, Math.min(FW, px + rnd(-0.5, 0.5))));
-        fireT = (wave ? 1.45 : 1.15) - hard * 0.45 + rnd(0, 0.3);
+        fireT = 1.15 - hard * 0.45 + rnd(0, 0.3);
       }
       // 문제
       if (!run) {
