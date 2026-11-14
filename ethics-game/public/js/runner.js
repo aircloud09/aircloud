@@ -1,6 +1,6 @@
 // 게임 A: 지식 러너
 import { T, engine, Actor, makeSky, addLights, toonMat, glowMat, textSprite, COLORS, CONFETTI, sfx, ease, disposeScene } from './engine.js';
-import { QRun, store, stepSlots } from './core.js';
+import { QRun, store, stepSlots, HARD_LEVEL } from './core.js';
 import { makeClouds } from './scenery.js';
 
 const ROAD_W = 5.4;
@@ -386,10 +386,11 @@ export function createRunner({ session, hud, onEnd }) {
     return { o: g, n, opts };
   }
 
-  function askStep(first) {
+  // quick: 미리 읽은 문제라서 게이트를 가까이에 낸다
+  function askStep(first, quick = false) {
     const step = run.step;
     const g = buildGate(step);
-    const z0 = -Math.max(30, readTime(step, first) * Q_SPEED);
+    const z0 = quick ? -38 : -Math.max(30, readTime(step, first) * Q_SPEED);
     gate = { ...g, z: z0, z0, step, done: false };
     gate.o.position.z = z0;
     scene.add(gate.o);
@@ -535,7 +536,10 @@ export function createRunner({ session, hud, onEnd }) {
       if (!ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < 3)) {
         phase = 'ask';
         run = new QRun(session.next());
-        askStep(true);
+        if (run.q.level >= HARD_LEVEL) {
+          engine.paused = true;
+          hud.preview(run.q, () => { engine.paused = false; askStep(true, true); }, '누르면 정답 게이트가 나옵니다.');
+        } else askStep(true);
       }
     } else if (phase === 'dead' && phaseT > 1.9) finish();
 

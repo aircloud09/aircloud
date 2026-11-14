@@ -14,9 +14,10 @@ export const hud = {
     this.ui.innerHTML = '';
     this.setCombo(0);
     this.setExtra('');
+    this.hidePreview();
     $('toast').className = '';
   },
-  hide() { this.el.classList.add('hidden'); this.ui.innerHTML = ''; },
+  hide() { this.el.classList.add('hidden'); this.ui.innerHTML = ''; this.hidePreview(); },
 
   setHearts(n, max = 3) {
     $('hearts').innerHTML = Array.from({ length: max }, (_, i) => `<span class="${i < n ? '' : 'off'}">❤️</span>`).join('');
@@ -136,5 +137,24 @@ export const hud = {
     c.style.animationDuration = ms + 'ms';
     centerTimer = setTimeout(() => c.classList.remove('show'), ms);
   },
+  // 어려운 문제: 게임을 멈추고 문제 전체를 먼저 보여 준다. Ready!를 누르면 onReady가 불린다.
+  preview(q, onReady, how) {
+    const it = (t) => `<div class="it">${esc(t)}</div>`;
+    let body = '';
+    if (q.type === 'ox') body = `<div class="stem">${esc(q.stem)}</div><div class="note">맞는 말인지 틀린 말인지 판단하세요.</div>`;
+    else if (q.type === 'choice') body = `<div class="stem">${esc(q.stem)}</div>${q.opts.map((o) => it(o.text)).join('')}`;
+    else if (q.type === 'multi') body = `<div class="stem">${esc(q.stem)}</div>${q.items.map((i) => it(i.text)).join('')}<div class="note">한 문장씩 차례로 옳은지 틀린지 고릅니다.</div>`;
+    else if (q.type === 'classify') body = `<div class="stem">${esc(q.stem)}</div><div class="cap">분류할 곳</div><div class="chips">${q.buckets.map((b) => `<span>${esc(b)}</span>`).join('')}</div><div class="cap">분류할 내용 (하나씩 차례로 나옵니다)</div>${q.items.map((i) => it(i.text)).join('')}`;
+    else if (q.type === 'order') body = `<div class="stem">${esc(q.stem)}</div><div class="chips">${q.shown.map((t) => `<span>${esc(t)}</span>`).join('')}</div><div class="note">첫 번째부터 차례로 고릅니다.</div>`;
+    else if (q.type === 'passage') body = `<div class="pass">${esc(q.passage)}</div><div class="stem">${esc(q.who.stem || '이 주장을 한 사상가는?')}</div><div class="chips">${q.who.opts.map((o) => `<span>${esc(o.text)}</span>`).join('')}</div><div class="cap">이어지는 질문: ${esc(q.then.stem)}</div>${q.then.opts.map((o) => it(o.text)).join('')}`;
+    $('ready-badges').innerHTML = `<span class="hard">어려운 문제</span><span>${TYPE_LABEL[q.type]}</span><span>Lv.${q.level}</span>${q.isReview ? '<span style="background:var(--purple);color:#fff">🔁 복습</span>' : ''}`;
+    $('ready-body').innerHTML = body + `<div class="note">시간 제한 없이 읽고, 준비되면 Ready!를 누르세요. ${esc(how || '')}</div>`;
+    const box = $('ready');
+    box.classList.remove('hidden');
+    box.firstElementChild.scrollTop = 0;
+    this.clearQuestion();
+    $('ready-btn').onclick = () => { box.classList.add('hidden'); onReady(); };
+  },
+  hidePreview() { $('ready').classList.add('hidden'); },
   esc,
 };

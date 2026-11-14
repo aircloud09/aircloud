@@ -1,7 +1,7 @@
 // 게임 B: 개념 슬래시
 // 물건이 계속 튀어 오르고, 손가락으로 그어서 벤다. 문제가 나오면 정답 구슬만 베어야 한다.
 import { T, engine, Actor, makeSky, addLights, toonMat, glowMat, textSprite, CONFETTI, sfx, ease, disposeScene } from './engine.js';
-import { QRun, store, stepSlots } from './core.js';
+import { QRun, store, stepSlots, HARD_LEVEL } from './core.js';
 import { hexIsland, makeClouds, place } from './scenery.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -125,11 +125,11 @@ export function createSlash({ session, hud, onEnd }) {
     if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
     return Math.max(first ? 2.4 : 1.4, Math.min(10, (first ? 1.6 : 1.0) + chars * 0.07));
   }
-  function startStep(first) {
+  function startStep(first, quick = false) {
     step = run.step;
     slots = stepSlots(step);
     answering = true;
-    readLeft = readTime(first);
+    readLeft = quick ? 0.8 : readTime(first);
     wavesLeft = 2; waveLeft = 0;
     stepMax = stepLeft = readLeft + wavesLeft * WAVE;
     const hint = step.kind === 'ox' ? '맞으면 O 구슬, 틀리면 X 구슬을 베세요'
@@ -259,7 +259,13 @@ export function createSlash({ session, hud, onEnd }) {
       if (bombT <= 0) { tossBomb(); bombT = rnd(3.2, 6) - hard * 1.5; }
       if (!run) {
         nextQ -= dt;
-        if (nextQ <= 0) { run = new QRun(session.next()); startStep(true); }
+        if (nextQ <= 0) {
+          run = new QRun(session.next());
+          if (run.q.level >= HARD_LEVEL) {
+            engine.paused = true; last = null;
+            hud.preview(run.q, () => { engine.paused = false; startStep(true, true); }, '누르면 정답 구슬이 올라옵니다.');
+          } else startStep(true);
+        }
       } else if (answering) {
         stepLeft -= dt;
         hud.timer(stepLeft / stepMax);

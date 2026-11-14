@@ -1,7 +1,7 @@
 // 게임 C: 논쟁 배틀 (실시간)
 // 손가락을 끌어 불덩이를 피하면서, 정답 구슬이 도착할 때 그 줄에 서서 받아친다.
 import { T, engine, Actor, makeSky, addLights, glowMat, textSprite, CONFETTI, sfx, ease, disposeScene } from './engine.js';
-import { QRun, store, stepSlots } from './core.js';
+import { QRun, store, stepSlots, HARD_LEVEL } from './core.js';
 import { hexIsland, makeClouds, place } from './scenery.js';
 
 const FOES = {
@@ -134,7 +134,7 @@ export function createBattle({ session, hud, onEnd }) {
     if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
     return Math.max(first ? 3.8 : 2.8, Math.min(13, (first ? 2.8 : 2.0) + chars * 0.075));
   }
-  function startStep(first) {
+  function startStep(first, quick = false) {
     step = run.step;
     const sl = stepSlots(step);
     const colW = Math.min(1.5, (FW * 2) / sl.n);
@@ -154,7 +154,7 @@ export function createBattle({ session, hud, onEnd }) {
       scene.add(orb);
       orbs.push({ orb, strip, x, opt: o, slot: i, color: sl.colors[i] });
     });
-    const time = readTime(first);
+    const time = quick ? 4 : readTime(first);
     wave = { orbs, colW, z: EZ + 1.4, z0: EZ + 1.4, speed: (PZ - (EZ + 1.4)) / time, sl };
     const hint = '불덩이를 피하면서, 정답 구슬이 올 때 그 줄에 서세요';
     hud.showQuestion(run.q, step, { opts: true, hint });
@@ -301,7 +301,10 @@ export function createBattle({ session, hud, onEnd }) {
         if (nextQ <= 0 && foe && foe.ready) {
           run = new QRun(session.next());
           if (run.q.type === 'passage') { foe.a.setSilhouette(true); foe.label = '???'; drawFoePlate(); poof(foe.a.root.position, ['#1b1630', '#6a5d86']); }
-          startStep(true);
+          if (run.q.level >= HARD_LEVEL) {
+            engine.paused = true; dragging = false;
+            hud.preview(run.q, () => { engine.paused = false; startStep(true, true); }, '누르면 정답 구슬이 다가옵니다.');
+          } else startStep(true);
         }
       } else if (wave) {
         wave.z += wave.speed * dt;

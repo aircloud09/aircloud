@@ -5,6 +5,9 @@ const KEY = 'ethics-quest.v1';
 export const SRS_GAPS = [4, 20, 60, 150, 300, 500];
 const REVIEW_RATIO = 0.2;
 
+// 이 레벨 이상은 '어려운 문제': 게임을 멈추고 먼저 읽게 한다
+export const HARD_LEVEL = 4;
+
 export const TYPE_LABEL = {
   ox: 'O/X', choice: '객관식', multi: '모두 고르기',
   classify: '분류', order: '순서', passage: '제시문',
@@ -12,6 +15,7 @@ export const TYPE_LABEL = {
 
 // 테스트용 주소창 옵션: ?type=ox 처럼 문제 유형을 고정
 const DEBUG_TYPE = new URLSearchParams(location.search).get('type');
+const DEBUG_LEVEL = Number(new URLSearchParams(location.search).get('lv')) || 0; // ?lv=4 처럼 레벨 고정
 const rand = (n) => Math.floor(Math.random() * n);
 export function shuffle(a) {
   const r = a.slice();
@@ -166,7 +170,7 @@ export class Session {
 
   get targetLevel() {
     const d = store.d;
-    return d.fixedLevel || Math.max(1, Math.min(5, Math.round(d.level)));
+    return DEBUG_LEVEL || d.fixedLevel || Math.max(1, Math.min(5, Math.round(d.level)));
   }
 
   next() {
@@ -189,6 +193,7 @@ export class Session {
         pool = bank.list.filter((q) => q.id !== this.lastId);
       }
       if (DEBUG_TYPE) pool = bank.list.filter((q) => q.type === DEBUG_TYPE && q.id !== this.lastId);
+      if (DEBUG_LEVEL) { const f = pool.filter((q) => q.level === DEBUG_LEVEL); if (f.length) pool = f; }
       const t = this.targetLevel;
       const byDist = (k) => pool.filter((q) => Math.abs(q.level - t) <= k);
       const cand = [0, 1, 2, 4].map(byDist).find((c) => c.length) || pool;

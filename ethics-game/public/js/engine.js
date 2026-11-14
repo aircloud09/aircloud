@@ -44,7 +44,7 @@ function detectTier() {
 export const engine = {
   renderer: null, composer: null, canvas: null,
   tierName: 'high', tier: TIERS.high, autoTier: true,
-  stage: null, tweens: [], time: 0, shakeAmt: 0,
+  stage: null, tweens: [], time: 0, shakeAmt: 0, paused: false,
   assets: { chars: {}, clips: {}, env: {} },
   particles: null,
   _fps: { t: 0, n: 0 },
@@ -124,6 +124,7 @@ export const engine = {
     if (this.stage && this.stage.dispose) this.stage.dispose();
     this.tweens.length = 0;
     this.shakeAmt = 0;
+    this.paused = false;
     this.stage = stage;
     if (stage) {
       this.particles.reset();
@@ -136,9 +137,11 @@ export const engine = {
   },
 
   frame(dt) {
-    this.time += dt;
     const st = this.stage;
     if (!st) return;
+    // 일시 정지 중에는 화면만 그리고 진행은 멈춘다
+    if (this.paused) { if (this.composer) this.composer.render(0); else this.renderer.render(st.scene, st.camera); return; }
+    this.time += dt;
     for (let i = this.tweens.length - 1; i >= 0; i--) {
       const tw = this.tweens[i];
       tw.t += dt;
