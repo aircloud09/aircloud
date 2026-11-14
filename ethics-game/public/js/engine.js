@@ -185,11 +185,10 @@ export const engine = {
     return out;
   },
 
+  // 처음에는 내 캐릭터와 배경만 받고, 나머지 캐릭터는 뒤에서 이어서 받는다
   async load(onProgress) {
     const loader = new T.GLTFLoader();
     loader.setMeshoptDecoder(T.MeshoptDecoder);
-    const files = ['knight', 'mage', 'barbarian', 'rogue', 'rogue_hooded', 'env'];
-    let done = 0;
     const toon = toonGradient();
     const toonMats = new Map();
     const convert = (root) => root.traverse((o) => {
@@ -201,19 +200,35 @@ export const engine = {
       if (!toonMats.has(m)) toonMats.set(m, new T.MeshToonMaterial({ map: m.map, color: m.color, gradientMap: toon }));
       o.material = toonMats.get(m);
     });
-    await Promise.all(files.map(async (f) => {
-      const g = await loader.loadAsync(`assets/models/${f}.glb`);
-      convert(g.scene);
-      if (f === 'env') {
-        for (const c of g.scene.children) this.assets.env[c.name] = c;
-      } else {
-        this.assets.chars[f] = g.scene;
-        for (const clip of g.animations) this.assets.clips[clip.name] = clip;
+    const prog = {};
+    const report = (key, e) => {
+      if (!onProgress) return;
+      prog[key] = e.total ? e.loaded / e.total : 0;
+      const v = Object.values(prog);
+      onProgress(v.reduce((a, b) => a + b, 0) / 2);
+    };
+    this._charP = {};
+    this.ensureChar = (name, key = null) => {
+      if (!this._charP[name]) {
+        this._charP[name] = loader.loadAsync(`assets/models/${name}.glb`, key ? (e) => report(key, e) : undefined).then((g) => {
+          convert(g.scene);
+          this.assets.chars[name] = g.scene;
+          // 캐릭터들은 같은 뼈대를 쓰므로 애니메이션은 처음 받은 것을 함께 쓴다
+          if (!Object.keys(this.assets.clips).length) for (const clip of g.animations) this.assets.clips[clip.name] = clip;
+          return g.scene;
+        });
       }
-      done++;
-      if (onProgress) onProgress(done / files.length);
-    }));
+      return this._charP[name];
+    };
+    const mine = GEAR[store.d.opts.char] ? store.d.opts.char : 'knight';
+    const env = loader.loadAsync('assets/models/env.glb', (e) => report('env', e)).then((g) => {
+      convert(g.scene);
+      for (const c of g.scene.children) this.assets.env[c.name] = c;
+    });
+    await Promise.all([this.ensureChar(mine, 'char'), env]);
+    (async () => { for (const n of Object.keys(GEAR)) { try { await this.ensureChar(n); } catch (e) { delete this._charP[n]; } } })();
   },
+  hasChar(name) { return !!this.assets.chars[name]; },
 
   prop(name, scale = 1) {
     const src = this.assets.env[name];

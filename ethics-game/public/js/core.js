@@ -27,7 +27,7 @@ function uid() {
 const DEFAULTS = () => ({
   uid: uid(), nickname: '', solved: 0, correct: 0,
   level: 2, fixedLevel: 0, srs: {}, seen: [],
-  best: { runner: 0, swipe: 0, battle: 0 },
+  best: { runner: 0, slash: 0, battle: 0 },
   opts: { sound: true, music: true, quality: 'auto', char: 'knight' },
 });
 
@@ -113,6 +113,18 @@ export function buildSteps(q) {
   }
   steps.forEach((s, i) => { s.index = i; s.total = steps.length; });
   return steps;
+}
+
+// 한 step의 보기를 칸(레인/구슬) 순서로 정리. 색과 짧은 표시도 함께 준다.
+const SLOT_COLORS = ['#ff5d6c', '#35d07f', '#4aa8ff', '#ffc93c'];
+export function stepSlots(step) {
+  const n = step.slots || step.options.length;
+  const opts = Array.from({ length: n }, (_, i) => step.options.find((o, k) => (o.slot ?? k) === i) || null);
+  const binary = step.kind === 'ox' || step.kind === 'tf';
+  const colors = binary ? [SLOT_COLORS[1], SLOT_COLORS[0]] : SLOT_COLORS.slice(0, n);
+  const short = opts.every((o) => !o || o.text.length <= 4);
+  const labels = opts.map((o, i) => (o ? (short ? o.text : String(i + 1)) : '—'));
+  return { n, opts, colors, labels, short };
 }
 
 // 문제 하나의 진행 상태

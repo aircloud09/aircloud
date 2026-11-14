@@ -26,7 +26,9 @@ export function createLobby() {
   const clouds = makeClouds(scene, 8, { x: 40, yMin: -9, yMax: 6, zMin: -40, zMax: -12, scale: [2, 4] });
 
   let actor = null;
-  function setChar(name) {
+  async function setChar(name) {
+    if (!engine.hasChar(name)) await engine.ensureChar(name);
+    if (store.d.opts.char !== name) return; // 받는 사이에 다른 캐릭터를 골랐다
     if (actor) island.remove(actor.root);
     actor = new Actor(name);
     actor.root.scale.setScalar(1.0);
@@ -34,7 +36,10 @@ export function createLobby() {
     actor.play('Idle');
     island.add(actor.root);
   }
-  setChar(store.d.opts.char);
+  actor = new Actor(store.d.opts.char);
+  actor.root.position.set(0, 0, 0.6);
+  actor.play('Idle');
+  island.add(actor.root);
 
   let t = 0;
   const stage = {

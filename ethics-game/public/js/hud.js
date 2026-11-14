@@ -1,6 +1,5 @@
 // 게임 화면 위의 공용 UI(체력, 문제 패널, 피드백)
-import { TYPE_LABEL, answerText } from './core.js';
-import { COLORS } from './engine.js';
+import { TYPE_LABEL, answerText, stepSlots } from './core.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -55,13 +54,12 @@ export const hud = {
     sub.textContent = step.sub || '';
     const opts = $('q-opts');
     if (cfg.opts) {
-      const n = step.slots || step.options.length;
-      const bySlot = Array.from({ length: n }, (_, i) => step.options.find((o, k) => (o.slot ?? k) === i));
+      const { n, opts: bySlot, colors } = stepSlots(step);
       const maxLen = Math.max(...bySlot.map((o) => (o ? o.text.length : 1)));
       // 보기 수와 글자 수에 따라 한 줄 / 2×2 / 세로 목록
       opts.className = maxLen <= [0, 14, 12, 7, 5][n] ? 'cols' : n === 4 && maxLen <= 11 ? 'grid' : 'list';
       opts.style.display = '';
-      opts.innerHTML = bySlot.map((o, i) => `<div class="o ${o ? '' : 'gone'}" data-slot="${i}" style="background:${COLORS[i]}"><span class="n">${i + 1}</span><span>${o ? esc(o.text) : '—'}</span></div>`).join('');
+      opts.innerHTML = bySlot.map((o, i) => `<div class="o ${o ? '' : 'gone'}" data-slot="${i}" style="background:${colors[i]}"><span class="n">${i + 1}</span><span>${o ? esc(o.text) : '—'}</span></div>`).join('');
     } else { opts.style.display = 'none'; opts.innerHTML = ''; }
     const hint = $('q-hint');
     hint.style.display = cfg.hint ? '' : 'none';

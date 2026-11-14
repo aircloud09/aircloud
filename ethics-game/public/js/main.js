@@ -4,14 +4,14 @@ import { engine, sfx, CHAR_NAMES } from './engine.js';
 import { hud } from './hud.js';
 import { createLobby } from './lobby.js';
 import { createRunner } from './runner.js';
-import { createSwipe } from './swipe.js';
+import { createSlash } from './slash.js';
 import { createBattle } from './battle.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = hud.esc;
 const GAMES = {
   runner: { name: '지식 러너', create: createRunner },
-  swipe: { name: '개념 스와이프', create: createSwipe },
+  slash: { name: '개념 슬래시', create: createSlash },
   battle: { name: '논쟁 배틀', create: createBattle },
 };
 let lobby = null, game = null, modalOnClose = null;
