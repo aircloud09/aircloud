@@ -92,7 +92,7 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 #q-type { background: var(--blue); color: #fff; }
 #q-review { background: var(--purple); color: #fff; }
 #q-prog { margin-left: auto; border: 0 !important; background: none !important; opacity: .6; }
-#q-passage { padding: 8px 10px; margin-bottom: 7px; border-left: 5px solid var(--purple); border-radius: 8px; background: #f1ebff; font-size: 15.5px; line-height: 1.38; font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; font-weight: 600; }
+#q-passage { white-space: pre-line;  padding: 8px 10px; margin-bottom: 7px; border-left: 5px solid var(--purple); border-radius: 8px; background: #f1ebff; font-size: 15.5px; line-height: 1.38; font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; font-weight: 600; }
 #q-prompt { font-size: 18.5px; line-height: 1.32; word-break: keep-all; }
 #q-chain { margin-top: 6px; font-size: 14px; color: #6a5d86; }
 #q-chain b { font-weight: 400; color: var(--ink); background: #e9f9ef; border: 2px solid var(--green); border-radius: 8px; padding: 1px 6px; margin: 0 2px; display: inline-block; }
@@ -107,6 +107,24 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 #q-opts .o.right { outline: 4px solid #fff; box-shadow: 0 0 0 7px var(--green); }
 #q-opts .o.wrong { opacity: .35; }
 #q-hint { margin-top: 7px; font-size: 14px; text-align: center; color: #6a5d86; }
+/* 러너: 처음엔 크게, 그 뒤엔 화면 왼쪽 위에 작게 */
+#qpanel.side { left: 8px; right: auto; width: min(54%, 260px); margin: 0; top: calc(50px + var(--safe-t)); padding: 6px 8px 7px; border-width: 2px; border-radius: 12px; box-shadow: 0 3px 0 var(--line); background: rgba(255,250,240,.9); animation: shrink .3s; }
+@keyframes shrink { from { transform: scale(1.4); transform-origin: top left; opacity: .3; } }
+#qpanel.side .q-badges { font-size: 10.5px; margin-bottom: 3px; gap: 3px; }
+#qpanel.side .q-badges span { padding: 0 5px; border-width: 1.5px; }
+#qpanel.side #q-passage { font-size: 11.5px; line-height: 1.3; padding: 4px 6px; margin-bottom: 4px; max-height: 5.4em; overflow: hidden; border-left-width: 3px; }
+#qpanel.side #q-prompt { font-size: 13px; line-height: 1.25; }
+#qpanel.side #q-chain { font-size: 11px; margin-top: 3px; }
+#qpanel.side #q-sub { font-size: 14.5px; margin-top: 4px; padding: 4px 5px; border-width: 2px; border-radius: 9px; }
+#qpanel.side #q-opts { margin-top: 4px; gap: 3px; }
+#qpanel.side #q-opts, #qpanel.side #q-opts.grid, #qpanel.side #q-opts.cols { display: flex; flex-direction: column; }
+#qpanel.side #q-opts .o { flex-direction: row; text-align: left; justify-content: flex-start; padding: 2px 5px; font-size: 12px; border-width: 2px; border-radius: 8px; gap: 4px; }
+#qpanel.side #q-opts .o .n { width: 17px; height: 17px; font-size: 11px; }
+#qpanel.side #q-hint { display: none; }
+#qpanel.side #q-timer { margin-top: 4px; height: 5px; }
+#toast.small { padding: 8px 11px; }
+#toast.small b { font-size: 18px; }
+#toast.small p { font-size: 13.5px; line-height: 1.35; }
 #qpanel.compact { padding: 6px 8px 8px; top: calc(48px + var(--safe-t)); }
 #qpanel.compact .q-badges { display: none; }
 #qpanel.compact #q-sub { margin-top: 0; padding: 5px 8px; font-size: 17px; }

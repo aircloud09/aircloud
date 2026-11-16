@@ -69,6 +69,9 @@ export const hud = {
     p.dataset.qid = q.id;
     p.classList.remove('hidden');
     p.classList.toggle('compact', !!cfg.compact);
+    // side: 문제를 처음 크게 보여 준 뒤 화면 옆에 작게 띄우는 모드
+    if (p.classList.contains('side') !== !!cfg.side) { p.style.animation = 'none'; void p.offsetWidth; p.style.animation = ''; }
+    p.classList.toggle('side', !!cfg.side);
     if (fresh) { p.style.animation = 'none'; void p.offsetWidth; p.style.animation = ''; }
     $('q-type').textContent = TYPE_LABEL[q.type];
     $('q-lv').textContent = 'Lv.' + q.level;
@@ -125,6 +128,16 @@ export const hud = {
     clearTimeout(toastTimer);
     t.className = ok ? 'ok' : 'no';
     t.innerHTML = `<b>${ok ? '정답!' : '오답'}</b>${ok ? '' : `<p class="ans">정답: ${esc(answerText(q))}</p>`}<p>${esc(q.explanation || '')}</p>`;
+    void t.offsetWidth;
+    t.classList.add('show');
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  },
+  // 게이트 하나를 지날 때마다 보여 주는 짧은 해설
+  toastStep(ok, correctText, exp, ms = 2600) {
+    const t = $('toast');
+    clearTimeout(toastTimer);
+    t.className = (ok ? 'ok' : 'no') + ' small';
+    t.innerHTML = `<b>${ok ? '맞았어요!' : '틀렸어요'}</b>${ok ? '' : `<p class="ans">정답: ${esc(correctText)}</p>`}${exp ? `<p>${esc(exp)}</p>` : ''}`;
     void t.offsetWidth;
     t.classList.add('show');
     toastTimer = setTimeout(() => t.classList.remove('show'), ms);

@@ -5,7 +5,8 @@ import { makeClouds } from './scenery.js';
 
 const ROAD_W = 5.4;
 const LW = ROAD_W / 3;      // 기본 3레인의 한 칸 너비
-const Q_SPEED = 11;          // 문제 구간 속도(고정)
+const SHOW_TIME = 5;         // 문제를 크게 보여 주는 시간(초). 이때는 장애물이 없다
+const GATE_CLEAR = 22;       // 게이트 앞뒤로 비워 두는 거리
 const SPAWN_Z = -64;
 const CAR = 8;               // 수레 한 칸 길이
 const TOP = 1.9;             // 수레 지붕 높이
@@ -354,15 +355,11 @@ export function createRunner({ session, hud, onEnd }) {
     spawnGap = len + rnd(10, 15) - hard * 4;
   }
 
-  // ---------- 문제 게이트 ----------
-  function readTime(step, first) {
-    let chars = (step.sub || '').length;
-    if (first || step.passage) chars += step.prompt.length;
-    if (first && step.passage) chars += step.passage.length;
-    if (!step.fixed || first) chars += step.options.reduce((s, o) => s + o.text.length, 0);
-    const t = (first ? 2.6 : 1.9) + chars * 0.075;
-    return Math.max(first ? 3.6 : 2.6, Math.min(13, t));
-  }
+  // ---------- 문제 ----------
+  // 흐름: 장애물 없이 달리며 문제를 5초간 크게 보여 줌 → 문제는 왼쪽 위에 작게
+  //       → 평소처럼 장애물이 나오고, 그 사이에 답 게이트가 나옴 → 게이트를 지날 때마다 해설
+  let showLeft = 0, gateWait = 0, holdGate = false;
+  const labelSize = (t) => [0, 110, 100, 90, 76, 62, 52][t.length] || 52;
   function buildGate(step) {
     const { n, opts, colors, labels, short } = stepSlots(step);
     const w = ROAD_W / n;
@@ -375,7 +372,7 @@ export function createRunner({ session, hud, onEnd }) {
         const strip = new T.Mesh(new T.PlaneGeometry(w * 0.9, 18), stripMats[colors[i]]);
         strip.rotation.x = -Math.PI / 2; strip.position.set(x, 0.05, 9); strip.userData.ownGeo = true; g.add(strip);
       }
-      const s = textSprite(labels[i], { w: 320, h: 200, size: short ? 96 : 150, bg: o ? colors[i] : '#9a94a8', border: '#ffffff', color: '#fff', stroke: 'rgba(0,0,0,.25)', scale: Math.min(w * 0.94, 1.9) });
+      const s = textSprite(labels[i], { w: 320, h: 200, size: short ? labelSize(labels[i]) : 150, bg: o ? colors[i] : '#9a94a8', border: '#ffffff', color: '#fff', stroke: 'rgba(0,0,0,.25)', scale: Math.min(w * 0.94, 1.9) });
       s.position.set(x, 3.75, 0); g.add(s);
     });
     for (let i = 0; i <= n; i++) {
@@ -385,20 +382,30 @@ export function createRunner({ session, hud, onEnd }) {
     top.position.y = 3.0; top.userData.ownGeo = true; g.add(top);
     return { o: g, n, opts };
   }
-
-  // quick: 미리 읽은 문제라서 게이트를 가까이에 낸다
-  function askStep(first, quick = false) {
-    const step = run.step;
-    const g = buildGate(step);
-    const z0 = quick ? -38 : -Math.max(30, readTime(step, first) * Q_SPEED);
-    gate = { ...g, z: z0, z0, step, done: false };
-    gate.o.position.z = z0;
+  const HINT = (step) => (step.kind === 'ox' ? '곧 O / X 게이트가 나와요. 장애물을 피하며 맞는 쪽으로!'
+    : step.kind === 'tf' ? '곧 옳음 / 틀림 게이트가 나와요'
+      : '곧 정답 게이트가 나와요. 장애물을 피하며 정답 색깔 길로!');
+  function startQuestion() {
+    run = new QRun(session.next());
+    phase = 'show'; showLeft = SHOW_TIME;
+    hud.showQuestion(run.q, run.step, { opts: true, hint: HINT(run.step) });
+    sfx.play('gate');
+  }
+  function toAnswerPhase() {
+    phase = 'answer';
+    hud.showQuestion(run.q, run.step, { opts: true, side: true });
+    spawnGap = 3; gateWait = rnd(2.2, 3.2); holdGate = false;
+  }
+  // 앞쪽 장애물이 충분히 지나간 뒤 게이트를 낸다(게이트와 장애물이 겹치지 않도록)
+  function trySpawnGate() {
+    const busy = ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < SPAWN_Z + GATE_CLEAR);
+    if (busy) return;
+    const g = buildGate(run.step);
+    gate = { ...g, z: SPAWN_Z, z0: SPAWN_Z, step: run.step, done: false };
+    gate.o.position.z = SPAWN_Z;
     scene.add(gate.o);
-    remapLane(gate.n);
-    const hint = step.kind === 'ox' ? '맞으면 O, 틀리면 X 길로 달리세요'
-      : step.kind === 'tf' ? '옳은 내용이면 초록, 틀리면 빨강 길로'
-        : '정답 색깔의 길로 달리세요';
-    hud.showQuestion(run.q, step, { opts: true, hint });
+    holdGate = false;
+    spawnGap = GATE_CLEAR - 4;   // 게이트 뒤로도 잠깐 비워 둔다
     sfx.play('gate');
   }
 
@@ -419,23 +426,28 @@ export function createRunner({ session, hud, onEnd }) {
     const cs = g.opts.findIndex((o) => o && o.correct);
     hud.markOption(cs, 'right');
     g.o.children.forEach((c) => { if (c.userData.slot !== undefined && c.userData.slot !== cs) c.visible = false; });
-    const old = g.o;
-    ents.push({ type: 'deco', z: g.z, o: old });
+    ents.push({ type: 'deco', z: g.z, o: g.o });
     gate = null;
     remapLane(3);
-    if (res.done) finishQuestion(); else engine.wait(0.3, () => { if (!over && run) askStep(false); });
+    if (res.done) finishQuestion();
+    else {
+      // 게이트를 지날 때마다 해설
+      hud.toastStep(res.ok, res.correct.text, run.q.explanation, res.ok ? 2200 : 3600);
+      engine.wait(0.5, () => { if (!over && run) hud.showQuestion(run.q, run.step, { opts: true, side: true }); });
+      gateWait = rnd(2.2, 3.2);
+    }
   }
 
   function finishQuestion() {
     const ok = run.allOk, q = run.q;
     session.record(q, ok);
     hud.setScore(session.correct);
-    hud.toast(ok, q, ok ? 1500 : 3800);
+    hud.toast(ok, q, ok ? 2600 : 4200);
     engine.wait(0.6, () => hud.clearQuestion());
     run = null;
     if (!ok) loseHeart();
     else { actor.once('Cheer', 'Running_A', { speed: 1.8 }); baseSpeed = Math.min(23, baseSpeed + 0.45); }
-    if (!over) { phase = 'run'; runLeft = rnd(7, 10); spawnGap = 4; }
+    if (!over) { phase = 'run'; runLeft = rnd(8, 11); spawnGap = 6; }
   }
 
   function loseHeart() {
@@ -516,8 +528,7 @@ export function createRunner({ session, hud, onEnd }) {
     phaseT += dt; t0 += dt;
     // 속도
     let target = 0;
-    if (phase === 'run' || phase === 'clear') target = baseSpeed;
-    else if (phase === 'ask') target = Q_SPEED;
+    if (phase === 'run' || phase === 'clear' || phase === 'show' || phase === 'answer') target = baseSpeed;
     speed += (target - speed) * Math.min(1, dt * (over ? 2.5 : 3.5));
     const move = speed * dt;
     dist += move;
@@ -533,13 +544,17 @@ export function createRunner({ session, hud, onEnd }) {
       if (spawnGap <= 0 && runLeft > 0) spawnPattern();
       if (runLeft <= 0) phase = 'clear';
     } else if (phase === 'clear') {
-      if (!ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < 3)) {
-        phase = 'ask';
-        run = new QRun(session.next());
-        // 게임을 멈추고 문제를 먼저 읽게 한다. Ready!를 누르면 다시 달리고 정답 게이트가 나온다.
-        engine.paused = true; tStart = null;
-        hud.preview(run.q, () => { engine.paused = false; askStep(true, true); }, '누르면 다시 달리고 정답 게이트가 나옵니다.');
-      }
+      if (!ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < 3)) startQuestion();
+    } else if (phase === 'show') {
+      // 장애물 없이 달리면서 문제를 읽는다
+      showLeft -= dt;
+      hud.timer(showLeft / SHOW_TIME);
+      if (showLeft <= 0) toAnswerPhase();
+    } else if (phase === 'answer') {
+      if (!gate && !holdGate) { gateWait -= dt; if (gateWait <= 0) holdGate = true; }
+      if (!gate) hud.timer(1);
+      if (holdGate) trySpawnGate();
+      else { spawnGap -= move; if (spawnGap <= 0) spawnPattern(); }
     } else if (phase === 'dead' && phaseT > 1.9) finish();
 
     // 플레이어
@@ -623,6 +638,8 @@ export function createRunner({ session, hud, onEnd }) {
     if (gate) {
       gate.z += move; gate.o.position.z = gate.z;
       hud.timer(gate.z / gate.z0);
+      // 게이트가 가까워지면 레인 수를 보기 수에 맞춘다(앞뒤로 장애물이 없는 구간)
+      if (gate.z > -12 && lanes !== gate.n) remapLane(gate.n);
       if (gate.z >= -0.15 && !gate.done) resolveGate();
     }
 

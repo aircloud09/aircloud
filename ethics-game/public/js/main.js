@@ -1,5 +1,5 @@
 // 화면 전환과 메뉴
-import { store, bank, Session, api, answerText, stemText, SRS_GAPS, TYPE_LABEL } from './core.js';
+import { store, bank, Session, api, answerText, stemText, SRS_GAPS, TYPE_LABEL, BASIC_TYPES } from './core.js';
 import { engine, sfx, CHAR_NAMES } from './engine.js';
 import { hud } from './hud.js';
 import { createLobby } from './lobby.js';
@@ -73,7 +73,8 @@ function startGame(key) {
   sfx.play('click');
   $('home').classList.add('hidden');
   hud.show();
-  const session = new Session();
+  // 새 유형(빈칸, 틀린 곳 찾기 등)은 지식 러너에서만 낸다
+  const session = new Session(key === 'runner' ? null : BASIC_TYPES);
   hud.initBest(GAMES[key].icon, store.d.scores[key]);
   api.top(key).then((r) => hud.setRankData(r)).catch(() => {});
   game = GAMES[key].create({ session, hud, onEnd: (info) => endGame(key, session, info) });

@@ -8,7 +8,12 @@ const REVIEW_RATIO = 0.2;
 export const TYPE_LABEL = {
   ox: 'O/X', choice: '객관식', multi: '모두 고르기',
   classify: '분류', order: '순서', passage: '제시문',
+  fill: '빈칸', spot: '틀린 곳 찾기', match: '짝 맞추기',
+  keywords: '키워드 모으기', case: '사례 판단', compare: '갑·을 비교',
 };
+// 처음 만든 6가지 유형(슬래시·배틀은 이 유형만 출제)
+export const BASIC_TYPES = ['ox', 'choice', 'multi', 'classify', 'order', 'passage'];
+export const COMPARE_BUCKETS = ['갑만', '을만', '둘 다', '둘 다 아님'];
 
 // 테스트용 주소창 옵션: ?type=ox 처럼 문제 유형을 고정
 const DEBUG_TYPE = new URLSearchParams(location.search).get('type');
@@ -77,6 +82,21 @@ function prepare(q) {
   } else if (p.type === 'passage') {
     p.who.opts = shuffle(p.who.options.map((text, i) => ({ text, correct: i === p.who.answer })));
     p.then.opts = shuffle(p.then.options.map((text, i) => ({ text, correct: i === p.then.answer })));
+  } else if (p.type === 'fill' || p.type === 'case') {
+    p.opts = shuffle(p.options.map((text, i) => ({ text, correct: i === p.answer })));
+  } else if (p.type === 'match') {
+    p.lefts = shuffle(p.pairs.map((x) => x[0]));
+    p.rights = shuffle(p.pairs.map((x) => x[1]));
+  } else if (p.type === 'keywords') {
+    // 한 줄에 관련 키워드 1개 + 관련 없는 키워드 2개
+    const right = shuffle(p.right).slice(0, 3), wrong = shuffle(p.wrong);
+    p.rows = right.map((r, k) => {
+      const w = [wrong[(k * 2) % wrong.length], wrong[(k * 2 + 1) % wrong.length]];
+      return shuffle([{ text: r, correct: true }, ...w.map((text) => ({ text, correct: false }))]);
+    });
+  } else if (p.type === 'compare') {
+    p.nameOpts = shuffle(p.names);
+    p.items = shuffle(p.items);
   }
   return p;
 }
@@ -113,6 +133,29 @@ export function buildSteps(q) {
     const who = q.who.opts.find((o) => o.correct).text;
     steps.push({ ...base, kind: 'pick', prompt: q.who.stem || '이 주장을 한 사상가는?', passage: q.passage, options: q.who.opts, isWho: true });
     steps.push({ ...base, kind: 'pick', prompt: q.then.stem, passage: q.passage, options: q.then.opts, reveal: who });
+  } else if (q.type === 'fill') {
+    steps.push({ ...base, kind: 'pick', options: q.opts });
+  } else if (q.type === 'case') {
+    steps.push({ ...base, kind: 'pick', passage: q.case, options: q.opts });
+  } else if (q.type === 'spot') {
+    // 문장 조각 중 틀린 조각을 고른다(조각 순서는 그대로)
+    steps.push({ ...base, kind: 'pick', sub: q.parts.join(' '), fixed: true, options: q.parts.map((text, i) => ({ text, correct: i === q.wrong, slot: i })) });
+  } else if (q.type === 'match') {
+    const pairOf = Object.fromEntries(q.pairs);
+    q.lefts.forEach((l) => steps.push({
+      ...base, kind: 'pick', sub: `${l} ↔ ?`, fixed: true,
+      options: q.rights.map((text, i) => ({ text, correct: text === pairOf[l], slot: i })),
+    }));
+  } else if (q.type === 'keywords') {
+    q.rows.forEach((row) => steps.push({ ...base, kind: 'pick', options: row }));
+  } else if (q.type === 'compare') {
+    const passage = `갑: ${q.gap}\n을: ${q.eul}`;
+    steps.push({ ...base, kind: 'pick', prompt: '갑은 누구일까?', passage, options: q.nameOpts.map((text) => ({ text, correct: text === q.names[0] })) });
+    steps.push({ ...base, kind: 'pick', prompt: '을은 누구일까?', passage, options: q.nameOpts.map((text) => ({ text, correct: text === q.names[1] })) });
+    q.items.forEach((it) => steps.push({
+      ...base, kind: 'pick', prompt: '이 진술에 해당하는 쪽은?', passage, sub: it.text, fixed: true,
+      options: COMPARE_BUCKETS.map((text, i) => ({ text, correct: i === it.ans, slot: i })),
+    }));
   }
   steps.forEach((s, i) => { s.index = i; s.total = steps.length; });
   return steps;
@@ -125,7 +168,7 @@ export function stepSlots(step) {
   const opts = Array.from({ length: n }, (_, i) => step.options.find((o, k) => (o.slot ?? k) === i) || null);
   const binary = step.kind === 'ox' || step.kind === 'tf';
   const colors = binary ? [SLOT_COLORS[1], SLOT_COLORS[0]] : SLOT_COLORS.slice(0, n);
-  const short = opts.every((o) => !o || o.text.length <= 4);
+  const short = opts.every((o) => !o || o.text.length <= 6);
   const labels = opts.map((o, i) => (o ? (short ? o.text : String(i + 1)) : '—'));
   return { n, opts, colors, labels, short };
 }
@@ -154,16 +197,27 @@ export function answerText(q) {
     case 'classify': return q.buckets.map((b, i) => `${b}: ${q.items.filter((it) => it.bucket === i).map((it) => it.text).join(', ') || '-'}`).join(' | ');
     case 'order': return q.items.join(' → ');
     case 'passage': return `${q.who.options[q.who.answer]} — ${q.then.options[q.then.answer]}`;
+    case 'fill': case 'case': return q.options[q.answer];
+    case 'spot': return `틀린 부분 "${q.parts[q.wrong]}" → ${q.fix}`;
+    case 'match': return q.pairs.map((x) => `${x[0]}-${x[1]}`).join(', ');
+    case 'keywords': return '관련 키워드: ' + q.right.join(', ');
+    case 'compare': return `갑 ${q.names[0]}, 을 ${q.names[1]} | ` + q.items.map((it) => `${it.text}: ${COMPARE_BUCKETS[it.ans]}`).join(' / ');
     default: return '';
   }
 }
 export function stemText(q) {
-  return q.type === 'passage' ? `"${q.passage}"` : q.stem;
+  if (q.type === 'passage') return `"${q.passage}"`;
+  if (q.type === 'case') return `${q.case} — ${q.stem}`;
+  if (q.type === 'spot') return `${q.stem} "${q.parts.join(' ')}"`;
+  if (q.type === 'compare') return `갑: ${q.gap} / 을: ${q.eul}`;
+  return q.stem;
 }
 
 // 한 판(게임 1회) 동안의 출제 관리
 export class Session {
-  constructor() { this.count = 0; this.reviews = 0; this.correct = 0; this.log = []; this.lastId = null; }
+  // types: 이 판에서 낼 유형 목록(없으면 전부)
+  constructor(types = null) { this.count = 0; this.reviews = 0; this.correct = 0; this.log = []; this.lastId = null; this.allow = types ? new Set(types) : null; }
+  ok(q) { return !!q && (!this.allow || this.allow.has(q.type)); }
 
   get targetLevel() {
     const d = store.d;
@@ -177,19 +231,20 @@ export class Session {
     const allowed = Math.max(1, Math.floor((this.count + 1) * REVIEW_RATIO));
     if (this.reviews < allowed) {
       const due = Object.entries(d.srs)
-        .filter(([id, s]) => s.due <= d.solved && id !== this.lastId && bank.byId[id])
+        .filter(([id, s]) => s.due <= d.solved && id !== this.lastId && this.ok(bank.byId[id]))
         .sort((a, b) => a[1].due - b[1].due);
       if (due.length) { raw = bank.byId[due[0][0]]; isReview = true; }
     }
     // 2) 새 문제: 한 바퀴 다 돌기 전에는 반복하지 않음
     if (!raw) {
       const seen = new Set(d.seen);
-      let pool = bank.list.filter((q) => !seen.has(q.id) && !d.srs[q.id]);
+      const all = bank.list.filter((q) => this.ok(q));
+      let pool = all.filter((q) => !seen.has(q.id) && !d.srs[q.id]);
       if (!pool.length) {
         d.seen = [];
-        pool = bank.list.filter((q) => q.id !== this.lastId);
+        pool = all.filter((q) => q.id !== this.lastId);
       }
-      if (DEBUG_TYPE) pool = bank.list.filter((q) => q.type === DEBUG_TYPE && q.id !== this.lastId);
+      if (DEBUG_TYPE) pool = all.filter((q) => q.type === DEBUG_TYPE && q.id !== this.lastId);
       if (DEBUG_LEVEL) { const f = pool.filter((q) => q.level === DEBUG_LEVEL); if (f.length) pool = f; }
       const t = this.targetLevel;
       const byDist = (k) => pool.filter((q) => Math.abs(q.level - t) <= k);

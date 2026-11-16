@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'questions');
-const TYPES = ['ox', 'choice', 'multi', 'classify', 'order', 'passage'];
+const TYPES = ['ox', 'choice', 'multi', 'classify', 'order', 'passage', 'fill', 'spot', 'match', 'keywords', 'case', 'compare'];
 const LIMIT = { stem: 70, option: 34, item: 30, passage: 130, explanation: 140 };
 const errors = [], warns = [];
 const ids = new Set(), stems = new Map();
@@ -28,7 +28,7 @@ for (const f of files) {
     if (!str(q.unit)) err('unit 없음');
     if (!Array.isArray(q.tags) || !q.tags.length) err('tags 없음');
     if (!str(q.explanation)) err('explanation 없음'); else long(q.explanation, LIMIT.explanation, '해설');
-    if (q.type !== 'passage') { if (!str(q.stem)) err('stem 없음'); else long(q.stem, LIMIT.stem, '문제'); }
+    if (q.type !== 'passage' && q.type !== 'compare') { if (!str(q.stem)) err('stem 없음'); else long(q.stem, LIMIT.stem, '문제'); }
     count[q.type] = (count[q.type] || 0) + 1;
 
     const checkOptions = (opts, answer, what) => {
@@ -72,8 +72,33 @@ for (const f of files) {
         checkOptions(q.then.options, q.then.answer, 'then');
         if (!str(q.then.stem)) err('then.stem 없음');
       }
+    } else if (q.type === 'fill') {
+      if (!/\(\s*\)|\(　+\)/.test(q.stem)) warn('빈칸 ( ) 표시가 없음');
+      checkOptions(q.options, q.answer, '');
+    } else if (q.type === 'case') {
+      if (!str(q.case)) err('case(사례) 없음'); else long(q.case, LIMIT.passage, '사례');
+      checkOptions(q.options, q.answer, '');
+    } else if (q.type === 'spot') {
+      if (!Array.isArray(q.parts) || q.parts.length < 2 || q.parts.length > 4 || !q.parts.every(str)) err('parts는 2~4개 문장 조각');
+      else if (!Number.isInteger(q.wrong) || q.wrong < 0 || q.wrong >= q.parts.length) err('wrong 번호 오류');
+      if (!str(q.fix)) err('fix(바른 표현) 없음');
+    } else if (q.type === 'match') {
+      if (!Array.isArray(q.pairs) || q.pairs.length < 2 || q.pairs.length > 4) err('pairs는 2~4쌍');
+      else {
+        if (!q.pairs.every((x) => Array.isArray(x) && x.length === 2 && str(x[0]) && str(x[1]))) err('pairs 형식 오류');
+        if (new Set(q.pairs.map((x) => x[1])).size !== q.pairs.length) err('오른쪽 항목 중복');
+        if (new Set(q.pairs.map((x) => x[0])).size !== q.pairs.length) err('왼쪽 항목 중복');
+      }
+    } else if (q.type === 'keywords') {
+      if (!Array.isArray(q.right) || q.right.length < 2 || !q.right.every(str)) err('right는 2개 이상');
+      if (!Array.isArray(q.wrong) || q.wrong.length < 2 || !q.wrong.every(str)) err('wrong은 2개 이상');
+      else if (q.right.some((r) => q.wrong.includes(r))) err('right와 wrong에 같은 키워드');
+    } else if (q.type === 'compare') {
+      if (!str(q.gap) || !str(q.eul)) err('gap/eul 없음');
+      if (!Array.isArray(q.names) || q.names.length < 3 || q.names.length > 4 || new Set(q.names).size !== q.names.length) err('names는 서로 다른 3~4개(갑, 을, 그 외)');
+      if (!Array.isArray(q.items) || !q.items.length || !q.items.every((i) => str(i.text) && [0, 1, 2, 3].includes(i.ans))) err('items 형식 오류(ans: 0 갑만 1 을만 2 둘 다 3 둘 다 아님)');
     }
-    const key = (q.stem || q.passage || '').replace(/\s+/g, '');
+    const key = (q.stem || q.passage || q.gap || '').replace(/\s+/g, '');
     if (key) { if (stems.has(key)) warn(`${stems.get(key)}와 문제 문장이 같음`); else stems.set(key, q.id); }
   }
 }
