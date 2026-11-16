@@ -142,6 +142,16 @@ export const hud = {
     t.classList.add('show');
     toastTimer = setTimeout(() => t.classList.remove('show'), ms);
   },
+  // 게이트 하나를 지날 때마다: 제목 + 한 줄 + 해설
+  toastTitle(ok, title, line, exp, ms = 2400) {
+    const t = $('toast');
+    clearTimeout(toastTimer);
+    t.className = (ok ? 'ok' : 'no') + ' small';
+    t.innerHTML = `<b>${esc(title)}</b><p class="ans" style="color:${ok ? '#129a55' : '#e23a4b'}">${esc(line)}</p>${!ok && exp ? `<p>${esc(exp)}</p>` : ''}`;
+    void t.offsetWidth;
+    t.classList.add('show');
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  },
   hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('show'); },
   center(text, ms = 700) {
     const c = $('center-text');
