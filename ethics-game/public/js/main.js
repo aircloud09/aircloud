@@ -173,7 +173,7 @@ function showNotes() {
     .filter((x) => x.q).sort((a, b) => b.h.last - a.h.last);
   const body = items.length ? items.map(({ q, h }) => noteHtml(q, `<span class="tag stage">${h.n}번 풂</span>`)).join('')
     : '<div class="empty">아직 틀린 문제가 없습니다.</div>';
-  openModal(`<h2>📒 오답노트</h2><p class="sub">한 번이라도 틀린 문제는 다시 맞혀도 계속 나옵니다. 출제 비율은 틀린 문제·안 푼 문제 ${Math.round(WRONG_RATIO * 100)}%, 맞힌 문제 ${Math.round((1 - WRONG_RATIO) * 100)}%입니다.</p>${body}`);
+  openModal(`<h2>📒 오답노트</h2><p class="sub">한 번이라도 틀린 문제는 다시 맞혀도 계속 나옵니다. 출제 비율은 틀린 문제·안 푼 문제 ${Math.round(WRONG_RATIO * 100)}%(둘이 반반), 맞힌 문제 ${Math.round((1 - WRONG_RATIO) * 100)}%입니다.</p>${body}`);
   bindReports();
 }
 

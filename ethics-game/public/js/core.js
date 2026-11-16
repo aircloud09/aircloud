@@ -3,6 +3,8 @@
 const KEY = 'ethics-quest.v1';
 // 출제 비율: 틀린 문제(+아직 안 푼 문제) 70%, 맞히기만 한 문제 30%
 export const WRONG_RATIO = 0.7;
+// 그 70% 가운데 안 푼 문제의 몫(나머지는 틀린 문제)
+export const NEW_SHARE = 0.5;
 // 서술만 바꾼 변형 문제는 group이 같고, 같은 문제로 취급한다
 
 export const TYPE_LABEL = {
@@ -244,7 +246,11 @@ export class Session {
     let groups = [...bank.groups.keys()].filter((g) => members(g).length);
     if (DEBUG_LEVEL) { const f = groups.filter((g) => bank.groups.get(g)[0].level === DEBUG_LEVEL); if (f.length) groups = f; }
     // 틀린 문제(+안 푼 문제) 70%, 맞히기만 한 문제 30%
-    const A = groups.filter((g) => !d.hist[g] || d.hist[g].w);
+    // 70% 안에서는 안 푼 문제와 틀린 문제를 반반씩 낸다
+    // (틀린 문제가 쌓여도 새 문제가 계속 나오도록)
+    const NEW = groups.filter((g) => !d.hist[g]);
+    const WRONG = groups.filter((g) => d.hist[g] && d.hist[g].w);
+    const A = NEW.length && WRONG.length ? (Math.random() < NEW_SHARE ? NEW : WRONG) : NEW.length ? NEW : WRONG;
     const B = groups.filter((g) => d.hist[g] && !d.hist[g].w);
     // 방금 나온 문제는 잠시 쉬게 한다(최근 3개는 반드시, 문제가 많으면 최근 8개까지)
     const recentOf = (n) => new Set(d.recent.slice(Math.max(0, d.recent.length - n)));
@@ -253,7 +259,8 @@ export class Session {
     let pool = rest(first, Math.max(3, Math.min(8, Math.floor(first.length / 2))));
     if (!pool.length) pool = rest(first, 3);
     if (!pool.length) pool = rest(second, 3);
-    if (!pool.length) pool = first.length ? first : second;
+    if (!pool.length) pool = rest(groups, 3);   // 고른 쪽이 모두 방금 나온 문제면 다른 문제에서
+    if (!pool.length) pool = groups;
     // 실력에 맞는 레벨 우선
     const t = this.targetLevel;
     const lv = (g) => bank.groups.get(g)[0].level;
