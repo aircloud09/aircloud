@@ -287,6 +287,7 @@ export class Actor {
     this.onceLeft = 0; this.onceNext = null;
   }
   play(name, { loop = true, fade = 0.12, speed = 1 } = {}) {
+    this.holdAt = undefined;
     if (loop && this.curName === name && this.onceLeft <= 0) { this.cur.timeScale = speed; return; }
     const clip = engine.assets.clips[name];
     const a = this.actions[name] || (this.actions[name] = this.mixer.clipAction(clip));
@@ -306,7 +307,15 @@ export class Actor {
     this.onceLeft = dur - 0.12; this.onceNext = next;
     return dur;
   }
+  // 동작을 재생하다가 frac(0~1) 지점에서 멈춰 그 자세를 유지한다(슬라이딩 등)
+  hold(name, frac, speed = 1) {
+    this.play(name, { loop: false, fade: 0.04, speed });
+    this.holdAt = engine.assets.clips[name].duration * frac;
+  }
   update(dt) {
+    if (this.holdAt !== undefined && this.cur) {
+      if (this.cur.time >= this.holdAt) { this.cur.time = this.holdAt; this.cur.timeScale = 0; }
+    }
     this.mixer.update(dt);
     if (this.onceLeft > 0) {
       this.onceLeft -= dt;

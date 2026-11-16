@@ -208,7 +208,9 @@ export function createRunner({ session, hud, onEnd }) {
   };
 
   // 상태
-  let lanes = 3, speed = 0, baseSpeed = 15, dist = 0;
+  // 속도: 코인 0개 기본 → 200개에서 1.3배(최대)
+  const BASE_SPEED = 15, MAX_MUL = 1.3, MAX_COINS = 200;
+  let lanes = 3, speed = 0, baseSpeed = BASE_SPEED, dist = 0, jumpBuf = 0;
   let hearts = 3, coins = 0, phase = 'intro', phaseT = 0, runLeft = 5, spawnGap = 0;
   let run = null, gate = null, over = false, ended = false;
   const ents = [];
@@ -460,7 +462,7 @@ export function createRunner({ session, hud, onEnd }) {
     engine.wait(0.6, () => hud.clearQuestion());
     run = null;
     if (!ok) loseHeart();
-    else { actor.once('Cheer', 'Running_A', { speed: 1.8 }); baseSpeed = Math.min(23, baseSpeed + 0.45); }
+    else actor.once('Cheer', 'Running_A', { speed: 1.8 });
     if (!over) { phase = 'run'; runLeft = rnd(8, 11); spawnGap = 6; }
   }
 
@@ -506,16 +508,23 @@ export function createRunner({ session, hud, onEnd }) {
         return;
       }
       player.lane = to; sfx.play('swipe');
-    } else if (dir === 'up' && player.grounded && player.slide <= 0) {
-      player.vy = 9.8; player.y += 0.02; player.grounded = false;
-      actor.once('Jump_Full_Short', 'Running_A', { speed: 1.55, fade: 0.06 });
-      sfx.play('jump');
+    } else if (dir === 'up') {
+      // 슬라이딩 중이어도 바로 일어나 점프. 공중이면 착지하자마자 점프하도록 잠깐 기억
+      if (player.grounded) doJump(); else jumpBuf = 0.2;
     } else if (dir === 'down') {
-      if (!player.grounded) player.vy = -22;
-      player.slide = 0.72;
-      actor.once('Sit_Floor_Down', null, { speed: 3.6, fade: 0.05 });
+      // 점프 중이어도 바로 내리꽂고 슬라이딩
+      jumpBuf = 0;
+      if (!player.grounded) player.vy = Math.min(player.vy, -30);
+      player.slide = 0.72; lean = 1;
+      actor.hold('Sit_Floor_Down', 0.62, 4.5);   // 앉은 자세를 슬라이딩 내내 유지
       sfx.play('slide');
     }
+  }
+  function doJump() {
+    player.slide = 0; lean = 0; jumpBuf = 0;
+    player.vy = 9.8; player.y += 0.02; player.grounded = false;
+    actor.once('Jump_Full_Short', 'Running_A', { speed: 1.55, fade: 0.02 });
+    sfx.play('jump');
   }
   let tStart = null;
   const onTS = (e) => { const t = e.changedTouches[0]; tStart = { x: t.clientX, y: t.clientY, used: false }; };
@@ -542,6 +551,7 @@ export function createRunner({ session, hud, onEnd }) {
     phaseT += dt; t0 += dt;
     // 속도
     let target = 0;
+    baseSpeed = BASE_SPEED * (1 + (MAX_MUL - 1) * Math.min(coins, MAX_COINS) / MAX_COINS);
     if (phase === 'run' || phase === 'clear' || phase === 'show' || phase === 'answer') target = baseSpeed;
     speed += (target - speed) * Math.min(1, dt * (over ? 2.5 : 3.5));
     const move = speed * dt;
@@ -576,7 +586,7 @@ export function createRunner({ session, hud, onEnd }) {
     // 플레이어
     const tx = laneX(player.lane, lanes);
     const dx = tx - player.x;
-    player.x += dx * Math.min(1, dt * 13);
+    player.x += dx * Math.min(1, dt * 18);
     // 발밑 높이(땅 또는 수레 지붕)와 정면 충돌
     const sa = lanes === 3 ? solidAt(player.lane) : { ground: 0, block: null };
     if (sa.block && !GOD && !over && player.invuln <= 0) {
@@ -595,17 +605,20 @@ export function createRunner({ session, hud, onEnd }) {
     const ground = sa.ground;
     player.vy -= 31 * dt; player.y += player.vy * dt;
     if (player.y <= ground) { player.y = ground; player.vy = 0; player.grounded = true; } else player.grounded = player.y - ground < 0.02;
+    if (jumpBuf > 0) { jumpBuf -= dt; if (player.grounded && !over) doJump(); }
     camY += (player.y - camY) * Math.min(1, dt * 6);
     bump *= Math.exp(-dt * 12);
     if (player.slide > 0) {
       player.slide -= dt;
       if (player.grounded && Math.random() < dt * 40) engine.particles.emit(_dust.set(player.x, player.y + 0.15, 0.5), 1, { colors: ['#f5e3b5', '#e2c58a'], speed: 1.2, up: 1.5, gravity: 3, life: 0.4, size: 1.1 });
     }
-    lean += ((player.slide > 0 ? 0.42 : 0) - lean) * Math.min(1, dt * 16);
+    lean += ((player.slide > 0 ? 1 : 0) - lean) * Math.min(1, dt * 20);
     if (player.invuln > 0) player.invuln -= dt;
     actor.root.position.set(player.x + bump, player.y, 0);
     actor.root.rotation.z = -dx * 0.16;
-    actor.root.rotation.x = lean;
+    // 슬라이딩: 몸을 낮추고(납작하게) 살짝 숙인다
+    actor.root.rotation.x = -0.25 * lean;
+    actor.root.scale.set(0.72, 0.72 * (1 - 0.38 * lean), 0.72);
     actor.root.rotation.y = Math.PI - dx * 0.22;
     actor.root.visible = !(player.invuln > 0 && Math.floor(player.invuln * 14) % 2 === 0);
     blob.position.x = player.x; blob.position.y = ground + 0.04; blob.scale.setScalar(1 - Math.min(0.6, (player.y - ground) * 0.25));
