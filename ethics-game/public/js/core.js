@@ -1,9 +1,9 @@
 // 저장, 문제 은행, 출제(적응형 난이도 + 복습), 랭킹 통신
 
 const KEY = 'ethics-quest.v1';
-// 복습 단계별 간격(푼 문제 수 기준). 0단계는 3~5문제 뒤.
-export const SRS_GAPS = [4, 20, 60, 150, 300, 500];
-const REVIEW_RATIO = 0.2;
+// 출제 비율: 틀린 문제(+아직 안 푼 문제) 70%, 맞히기만 한 문제 30%
+export const WRONG_RATIO = 0.7;
+// 서술만 바꾼 변형 문제는 group이 같고, 같은 문제로 취급한다
 
 export const TYPE_LABEL = {
   ox: 'O/X', choice: '객관식', multi: '모두 고르기',
@@ -32,7 +32,9 @@ function uid() {
 
 const DEFAULTS = () => ({
   uid: uid(), nickname: '', solved: 0, correct: 0,
-  level: 2, fixedLevel: 0, srs: {}, seen: [],
+  level: 2, fixedLevel: 0,
+  // hist[group] = { w: 한 번이라도 틀렸는지, n: 푼 횟수, last: 마지막으로 푼 순번, v: 마지막에 나온 변형 id }
+  hist: {}, recent: [],
   best: { runner: 0, slash: 0, battle: 0 },
   // 게임별 최고 점수(한 판 기준): 러너=코인, 슬래시=벤 물건, 배틀=격파한 상대
   scores: { runner: 0, slash: 0, battle: 0 },
@@ -47,6 +49,11 @@ export const store = {
       if (raw) {
         const p = JSON.parse(raw), def = DEFAULTS();
         this.d = { ...def, ...p, best: { ...def.best, ...p.best }, scores: { ...def.scores, ...p.scores }, opts: { ...def.opts, ...p.opts } };
+        if (!p.hist) {
+          for (const id of p.seen || []) this.d.hist[id] = { w: false, n: 1, last: 0 };
+          for (const id of Object.keys(p.srs || {})) this.d.hist[id] = { w: true, n: 1, last: 0 };
+        }
+        delete this.d.srs; delete this.d.seen;
       }
     } catch (e) { /* 저장소를 못 쓰는 환경에서도 동작 */ }
     this.save();
@@ -63,6 +70,12 @@ export const bank = {
     const parts = await Promise.all(idx.files.map((f) => fetch('questions/' + f).then((r) => r.json())));
     this.list = parts.flat();
     this.byId = Object.fromEntries(this.list.map((q) => [q.id, q]));
+    this.groups = new Map();
+    for (const q of this.list) {
+      q.group = q.group || q.id;
+      if (!this.groups.has(q.group)) this.groups.set(q.group, []);
+      this.groups.get(q.group).push(q);
+    }
   },
 };
 
@@ -226,35 +239,38 @@ export class Session {
 
   next() {
     const d = store.d;
-    let raw = null, isReview = false;
-    // 1) 출제 시점이 된 복습 문제 (한 판의 최대 20%)
-    const allowed = Math.max(1, Math.floor((this.count + 1) * REVIEW_RATIO));
-    if (this.reviews < allowed) {
-      const due = Object.entries(d.srs)
-        .filter(([id, s]) => s.due <= d.solved && id !== this.lastId && this.ok(bank.byId[id]))
-        .sort((a, b) => a[1].due - b[1].due);
-      if (due.length) { raw = bank.byId[due[0][0]]; isReview = true; }
-    }
-    // 2) 새 문제: 한 바퀴 다 돌기 전에는 반복하지 않음
-    if (!raw) {
-      const seen = new Set(d.seen);
-      const all = bank.list.filter((q) => this.ok(q));
-      let pool = all.filter((q) => !seen.has(q.id) && !d.srs[q.id]);
-      if (!pool.length) {
-        d.seen = [];
-        pool = all.filter((q) => q.id !== this.lastId);
-      }
-      if (DEBUG_TYPE) pool = all.filter((q) => q.type === DEBUG_TYPE && q.id !== this.lastId);
-      if (DEBUG_LEVEL) { const f = pool.filter((q) => q.level === DEBUG_LEVEL); if (f.length) pool = f; }
-      const t = this.targetLevel;
-      const byDist = (k) => pool.filter((q) => Math.abs(q.level - t) <= k);
-      const cand = [0, 1, 2, 4].map(byDist).find((c) => c.length) || pool;
-      raw = cand[rand(cand.length)];
-    }
+    // 이 판에서 낼 수 있는 문제 묶음(같은 문제의 변형끼리 한 묶음)
+    const members = (g) => bank.groups.get(g).filter((q) => this.ok(q) && (!DEBUG_TYPE || q.type === DEBUG_TYPE));
+    let groups = [...bank.groups.keys()].filter((g) => members(g).length);
+    if (DEBUG_LEVEL) { const f = groups.filter((g) => bank.groups.get(g)[0].level === DEBUG_LEVEL); if (f.length) groups = f; }
+    // 틀린 문제(+안 푼 문제) 70%, 맞히기만 한 문제 30%
+    const A = groups.filter((g) => !d.hist[g] || d.hist[g].w);
+    const B = groups.filter((g) => d.hist[g] && !d.hist[g].w);
+    // 방금 나온 문제는 잠시 쉬게 한다(최근 3개는 반드시, 문제가 많으면 최근 8개까지)
+    const recentOf = (n) => new Set(d.recent.slice(Math.max(0, d.recent.length - n)));
+    const rest = (p, n) => { const r = recentOf(n); return p.filter((g) => !r.has(g)); };
+    const first = Math.random() < WRONG_RATIO ? A : B, second = first === A ? B : A;
+    let pool = rest(first, Math.max(3, Math.min(8, Math.floor(first.length / 2))));
+    if (!pool.length) pool = rest(first, 3);
+    if (!pool.length) pool = rest(second, 3);
+    if (!pool.length) pool = first.length ? first : second;
+    // 실력에 맞는 레벨 우선
+    const t = this.targetLevel;
+    const lv = (g) => bank.groups.get(g)[0].level;
+    const cand = [1, 2, 4].map((k) => pool.filter((g) => Math.abs(lv(g) - t) <= k)).find((c) => c.length) || pool;
+    // 오래전에 푼 문제(또는 안 푼 문제)를 먼저
+    const last = (g) => (d.hist[g] ? d.hist[g].last : -1);
+    const sorted = shuffle(cand).sort((a, b) => last(a) - last(b));
+    const g = sorted[rand(Math.max(1, Math.ceil(sorted.length / 3)))];
+    // 변형 중 지난번과 다른 것을 고른다
+    const h = d.hist[g];
+    let vs = members(g);
+    if (h && h.v && vs.length > 1) vs = vs.filter((q) => q.id !== h.v);
+    const raw = vs[rand(vs.length)];
     this.lastId = raw.id;
-    if (isReview) this.reviews++;
     const q = prepare(raw);
-    q.isReview = isReview;
+    q.group = g;
+    q.isReview = !!(h && h.w);
     return q;
   }
 
@@ -263,21 +279,21 @@ export class Session {
     d.solved++;
     this.count++;
     if (ok) { d.correct++; this.correct++; }
-    if (!d.seen.includes(q.id)) d.seen.push(q.id);
-    const s = d.srs[q.id];
-    if (!ok) {
-      d.srs[q.id] = { stage: 0, due: d.solved + 3 + rand(3) };
-    } else if (s) {
-      s.stage = Math.min(5, s.stage + 1);
-      s.due = d.solved + SRS_GAPS[s.stage];
-    }
+    const g = q.group || q.id;
+    const h = d.hist[g] || { w: false, n: 0 };
+    h.w = h.w || !ok; h.n++; h.last = d.solved; h.v = q.id;
+    d.hist[g] = h;
+    d.recent.push(g);
+    if (d.recent.length > 10) d.recent.shift();
+    if (q.isReview) this.reviews++;
     // 자동 난이도: 정답률 약 75%에서 균형
-    if (!d.fixedLevel && !q.isReview) {
+    if (!d.fixedLevel) {
       d.level = Math.max(1, Math.min(5, d.level + (ok ? 0.1 : -0.3)));
     }
     this.log.push({ id: q.id, ok });
     store.save();
   }
+
 }
 
 export const api = {

@@ -1,5 +1,5 @@
 // 화면 전환과 메뉴
-import { store, bank, Session, api, answerText, stemText, SRS_GAPS, TYPE_LABEL, BASIC_TYPES } from './core.js';
+import { store, bank, Session, api, answerText, stemText, WRONG_RATIO, TYPE_LABEL, BASIC_TYPES } from './core.js';
 import { engine, sfx, CHAR_NAMES } from './engine.js';
 import { hud } from './hud.js';
 import { createLobby } from './lobby.js';
@@ -37,7 +37,7 @@ function refreshHome() {
   const d = store.d;
   $('nick-text').textContent = d.nickname || '닉네임 설정';
   $('stat-correct').textContent = d.correct;
-  $('stat-review').textContent = Object.values(d.srs).filter((s) => s.due <= d.solved).length;
+  $('stat-review').textContent = Object.values(d.hist).filter((h) => h.w).length;
   for (const k of Object.keys(GAMES)) $('best-' + k).textContent = d.scores[k] ? `${GAMES[k].icon} ${d.scores[k]}` : '';
   api.top().then((r) => { $('stat-rank').textContent = r.me && r.me.rank ? r.me.rank + '위' : '-'; }).catch(() => { $('stat-rank').textContent = '-'; });
 }
@@ -167,13 +167,13 @@ async function showRank(sort = 'total') {
 // ---------- 오답노트 ----------
 function showNotes() {
   const d = store.d;
-  const items = Object.entries(d.srs).map(([id, s]) => ({ q: bank.byId[id], s })).filter((x) => x.q).sort((a, b) => a.s.due - b.s.due);
-  const body = items.length ? items.map(({ q, s }) => {
-    const left = s.due - d.solved;
-    const when = left <= 0 ? '곧 다시 나옴' : `${left}문제 뒤`;
-    return noteHtml(q, `<span class="tag stage">복습 ${s.stage}단계 · ${when}</span>`);
-  }).join('') : '<div class="empty">아직 틀린 문제가 없습니다.</div>';
-  openModal(`<h2>📒 오답노트</h2><p class="sub">틀렸던 문제는 맞힌 뒤에도 ${SRS_GAPS.slice(1).join(' → ')}문제 간격으로 다시 나옵니다.</p>${body}`);
+  // 한 번이라도 틀린 문제(변형은 하나로 묶어서 마지막에 나온 것으로 보여 줌)
+  const items = Object.entries(d.hist).filter(([, h]) => h.w)
+    .map(([g, h]) => ({ q: bank.byId[h.v] || (bank.groups.get(g) || [])[0], h }))
+    .filter((x) => x.q).sort((a, b) => b.h.last - a.h.last);
+  const body = items.length ? items.map(({ q, h }) => noteHtml(q, `<span class="tag stage">${h.n}번 풂</span>`)).join('')
+    : '<div class="empty">아직 틀린 문제가 없습니다.</div>';
+  openModal(`<h2>📒 오답노트</h2><p class="sub">한 번이라도 틀린 문제는 다시 맞혀도 계속 나옵니다. 출제 비율은 틀린 문제·안 푼 문제 ${Math.round(WRONG_RATIO * 100)}%, 맞힌 문제 ${Math.round((1 - WRONG_RATIO) * 100)}%입니다.</p>${body}`);
   bindReports();
 }
 
