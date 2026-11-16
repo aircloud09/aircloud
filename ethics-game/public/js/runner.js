@@ -370,9 +370,17 @@ export function createRunner({ session, hud, onEnd }) {
     strip.rotation.x = -Math.PI / 2; strip.position.set(0, 0.05, 3.5); strip.userData.ownGeo = true; g.add(strip);
     for (const dx of [-GATE_W / 2, GATE_W / 2]) { const p = new T.Mesh(postGeo, whiteMat); p.scale.set(1, 3.0, 1); p.position.set(dx, 1.5, 0); p.castShadow = true; g.add(p); }
     const top = new T.Mesh(new T.BoxGeometry(GATE_W + 0.25, 0.2, 0.2), whiteMat); top.position.y = 3.0; top.userData.ownGeo = true; g.add(top);
-    const size = [0, 120, 110, 96, 80, 66, 58, 52, 48][label.length] || 44;
-    const sp = textSprite(label, { w: 360, h: 200, size, bg: color, border: '#ffffff', color: '#fff', stroke: 'rgba(0,0,0,.25)', scale: 2.3 });
-    sp.position.y = 3.95; g.add(sp);
+    // 짧은 보기는 한 줄 크게, 긴 보기(최대 32자)는 여러 줄로 감싼 큰 글자판
+    let sp;
+    if (label.length <= 8) {
+      const size = [0, 120, 110, 96, 80, 66, 58, 52, 48][label.length];
+      sp = textSprite(label, { w: 360, h: 200, size, bg: color, border: '#ffffff', color: '#fff', stroke: 'rgba(0,0,0,.25)', scale: 2.3 });
+      sp.position.y = 3.95;
+    } else {
+      sp = textSprite(label, { w: 480, h: 400, size: 74, min: 40, pad: 22, bg: color, border: '#ffffff', color: '#fff', stroke: 'rgba(0,0,0,.3)', scale: 2.9 });
+      sp.position.y = 4.65;
+    }
+    g.add(sp);
     return g;
   }
   const HINT = (step) => (step.kind === 'ox' ? '곧 O, X 게이트가 따로 나와요. 맞는 쪽만 통과하고 나머지는 피하세요!'
@@ -386,7 +394,7 @@ export function createRunner({ session, hud, onEnd }) {
   }
   function prepareStep() {
     const { opts, colors, labels, short } = stepSlots(run.step);
-    queue = shuffle(opts.map((o, i) => (o ? { opt: o, slot: i, color: colors[i], label: o.text.length <= 8 ? o.text : String(i + 1) } : null)).filter(Boolean));
+    queue = shuffle(opts.map((o, i) => (o ? { opt: o, slot: i, color: colors[i], label: o.text } : null)).filter(Boolean));
     stepTotal = queue.length; judged = [];
     gateWait = rnd(1.6, 2.4);
     hud.showQuestion(run.q, run.step, { opts: true, side: true });
