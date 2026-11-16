@@ -229,6 +229,34 @@ export function stemText(q) {
 }
 
 // 한 판(게임 1회) 동안의 출제 관리
+// ---------- 숙지도 ----------
+// 프린트(단원)마다: 문제 묶음별 점수 × 난이도 가중치의 합 ÷ 만점
+//  - 점수: 안 풂 0 / 마지막에 틀림 0.1 / 틀린 적 있지만 다시 맞힘 0.8 / 한 번도 안 틀리고 맞힘 1
+//  - 가중치: Lv.1 1, Lv.2 1.5, Lv.3 2, Lv.4 3, Lv.5 4 → 어려운 문제까지 맞혀야 100%에 가까워짐
+export const LEVEL_WEIGHT = [0, 1, 1.5, 2, 3, 4];
+export function groupScore(h) {
+  if (!h) return 0;
+  const ok = h.ok === undefined ? !h.w : h.ok;   // 예전 기록은 틀린 적 여부로 판단
+  if (!ok) return 0.1;
+  return h.w ? 0.8 : 1;
+}
+export function mastery() {
+  const d = store.d, units = new Map();
+  for (const [g, list] of bank.groups) {
+    const q = list[0];
+    if (!units.has(q.unit)) units.set(q.unit, { unit: q.unit, got: 0, max: 0, solved: 0, total: 0, lv: [0, 1, 2, 3, 4, 5].map(() => ({ ok: 0, total: 0 })) });
+    const u = units.get(q.unit), h = d.hist[g], w = LEVEL_WEIGHT[q.level] || 1, sc = groupScore(h);
+    u.max += w; u.got += w * sc; u.total++;
+    if (h) u.solved++;
+    u.lv[q.level].total++;
+    if (sc >= 0.8) u.lv[q.level].ok++;
+  }
+  const list = [...units.values()].sort((a, b) => a.unit.localeCompare(b.unit));
+  for (const u of list) u.pct = u.max ? Math.round((u.got / u.max) * 100) : 0;
+  const got = list.reduce((s, u) => s + u.got, 0), max = list.reduce((s, u) => s + u.max, 0);
+  return { units: list, pct: max ? Math.round((got / max) * 100) : 0 };
+}
+
 export class Session {
   // types: 이 판에서 낼 유형 목록(없으면 전부)
   constructor(types = null) { this.count = 0; this.reviews = 0; this.correct = 0; this.log = []; this.lastId = null; this.allow = types ? new Set(types) : null; }
@@ -289,6 +317,7 @@ export class Session {
     const g = q.group || q.id;
     const h = d.hist[g] || { w: false, n: 0 };
     h.w = h.w || !ok; h.n++; h.last = d.solved; h.v = q.id;
+    h.ok = ok; h.c = (h.c || 0) + (ok ? 1 : 0);
     d.hist[g] = h;
     d.recent.push(g);
     if (d.recent.length > 10) d.recent.shift();

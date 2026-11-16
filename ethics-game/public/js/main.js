@@ -1,5 +1,5 @@
 // 화면 전환과 메뉴
-import { store, bank, Session, api, answerText, stemText, WRONG_RATIO, TYPE_LABEL, BASIC_TYPES } from './core.js';
+import { store, bank, Session, api, answerText, stemText, WRONG_RATIO, TYPE_LABEL, BASIC_TYPES, mastery } from './core.js';
 import { engine, sfx, CHAR_NAMES } from './engine.js';
 import { hud } from './hud.js';
 import { createLobby } from './lobby.js';
@@ -38,6 +38,8 @@ function refreshHome() {
   $('nick-text').textContent = d.nickname || '닉네임 설정';
   $('stat-correct').textContent = d.correct;
   $('stat-review').textContent = Object.values(d.hist).filter((h) => h.w).length;
+  $('quick-mastery').textContent = mastery().pct + '%';
+  $('quick-level').textContent = d.fixedLevel ? 'Lv.' + d.fixedLevel : `자동 Lv.${Math.round(d.level)}`;
   for (const k of Object.keys(GAMES)) $('best-' + k).textContent = d.scores[k] ? `${GAMES[k].icon} ${d.scores[k]}` : '';
   api.top().then((r) => { $('stat-rank').textContent = r.me && r.me.rank ? r.me.rank + '위' : '-'; }).catch(() => { $('stat-rank').textContent = '-'; });
 }
@@ -177,6 +179,40 @@ function showNotes() {
   bindReports();
 }
 
+// ---------- 숙지도 ----------
+function barColor(p) { return p >= 80 ? 'var(--green)' : p >= 50 ? 'var(--yellow)' : p >= 20 ? '#ff9f43' : 'var(--red)'; }
+function showMastery() {
+  const m = mastery();
+  const rows = m.units.map((u) => `<div class="mrow">
+    <div class="top"><span>${esc(u.unit)}</span><b>${u.pct}%</b></div>
+    <div class="mbar"><i style="width:${u.pct}%;background:${barColor(u.pct)}"></i></div>
+    <div class="lv">${u.lv.slice(1).map((l, i) => (l.total ? `<span>Lv.${i + 1} ${l.ok}/${l.total}</span>` : '')).join('')}<span>푼 문제 ${u.solved}/${u.total}</span></div>
+  </div>`).join('');
+  openModal(`<h2>📊 숙지도</h2>
+    <div class="mastery-all"><div class="big">${m.pct}%</div><span class="sub">전체 숙지도</span></div>
+    <p class="sub">맞힌 문제가 많을수록, 어려운 문제(Lv.4~5)를 맞힐수록 크게 오릅니다. 틀렸다가 다시 맞힌 문제는 80%만 인정합니다. Lv별 숫자는 맞힌 문제 / 전체 문제입니다.</p>
+    ${rows}
+    <button class="btn primary" id="m-level">🎚️ 난이도 조절하기</button>`);
+  $('m-level').onclick = () => { sfx.play('click'); showLevel(); };
+}
+
+// ---------- 난이도 ----------
+function showLevel() {
+  const d = store.d;
+  const opts = [[0, '자동', `지금 Lv.${Math.round(d.level)}`], [1, 'Lv.1', '아주 쉬움'], [2, 'Lv.2', '쉬움'], [3, 'Lv.3', '보통'], [4, 'Lv.4', '어려움'], [5, 'Lv.5', '아주 어려움']];
+  openModal(`<h2>🎚️ 난이도</h2>
+    <p class="sub">자동: 맞히면 올라가고 틀리면 내려가며 실력에 맞춥니다. 레벨을 고르면 그 레벨 근처(±1)의 문제가 주로 나옵니다.</p>
+    <div class="lv-pick">${opts.map(([v, l, sub]) => `<button data-v="${v}" class="${d.fixedLevel === v ? 'on' : ''}">${l}<small>${sub}</small></button>`).join('')}</div>`, { onClose: refreshHome });
+  $('modal-body').querySelectorAll('.lv-pick button').forEach((b) => {
+    b.onclick = () => {
+      sfx.unlock(); sfx.play('click');
+      d.fixedLevel = Number(b.dataset.v); store.save();
+      $('modal-body').querySelectorAll('.lv-pick button').forEach((x) => x.classList.toggle('on', x === b));
+      refreshHome();
+    };
+  });
+}
+
 // ---------- 설정 ----------
 function seg(key, options, cur) {
   return `<div class="seg" data-seg="${key}">${options.map(([v, label]) => `<button data-v="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
@@ -207,6 +243,7 @@ function showSettings() {
         if (v === 'auto') { engine.autoTier = true; } else { engine.autoTier = false; engine.setTier(v); }
       }
       store.save();
+      refreshHome();
       sfx.play('click');
     };
   });
@@ -237,6 +274,8 @@ async function boot() {
   $('btn-rank').onclick = () => { sfx.unlock(); sfx.play('click'); showRank('total'); };
   $('btn-notes').onclick = () => { sfx.unlock(); sfx.play('click'); showNotes(); };
   $('btn-settings').onclick = () => { sfx.unlock(); sfx.play('click'); showSettings(); };
+  $('btn-mastery').onclick = () => { sfx.unlock(); sfx.play('click'); showMastery(); };
+  $('btn-level').onclick = () => { sfx.unlock(); sfx.play('click'); showLevel(); };
   $('btn-nick').onclick = () => { sfx.unlock(); sfx.play('click'); askNickname(false); };
   $('btn-quit').onclick = () => { if (game) game.quit(); };
   document.addEventListener('visibilitychange', () => {

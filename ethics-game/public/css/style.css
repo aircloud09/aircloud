@@ -60,6 +60,24 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 .stat { flex: 1; padding: 8px 4px; text-align: center; box-shadow: 0 4px 0 var(--line); background: rgba(255,250,240,.94); }
 .stat b { display: block; font-size: 24px; font-weight: 400; }
 .stat span { font-size: 13px; opacity: .7; }
+.home-quick { display: flex; gap: 10px; margin-top: 10px; }
+.home-quick .quick { flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 15px; border: 3px solid var(--line); border-radius: 14px; background: #fff3c2; box-shadow: 0 4px 0 var(--line); }
+.home-quick .quick:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+.home-quick .quick i { font-style: normal; font-size: 20px; }
+.home-quick .quick b { margin-left: auto; font-weight: 400; font-size: 17px; }
+.mastery-all { text-align: center; margin: 4px 0 14px; }
+.mastery-all .big { font-size: 46px; line-height: 1; }
+.mrow { padding: 10px 12px; margin-bottom: 9px; border: 3px solid var(--line); border-radius: 14px; background: #fff; }
+.mrow .top { display: flex; align-items: baseline; gap: 8px; font-size: 17px; }
+.mrow .top b { margin-left: auto; font-weight: 400; font-size: 22px; }
+.mbar { height: 14px; margin: 6px 0 6px; border: 2px solid var(--line); border-radius: 8px; background: #eee; overflow: hidden; }
+.mbar i { display: block; height: 100%; border-radius: 6px; }
+.mrow .lv { display: flex; gap: 4px; flex-wrap: wrap; font-size: 12.5px; color: #5b5073; }
+.mrow .lv span { padding: 1px 6px; border: 2px solid rgba(43,33,64,.25); border-radius: 999px; background: #faf6ff; }
+.lv-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 4px; }
+.lv-pick button { padding: 12px 4px; font-size: 18px; border: 3px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 4px 0 var(--line); }
+.lv-pick button.on { background: var(--yellow); }
+.lv-pick button small { display: block; font-size: 12px; opacity: .7; }
 .home-games { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
 .game-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; width: 100%; }
 .game-card i { font-style: normal; font-size: 34px; width: 54px; height: 54px; display: grid; place-items: center; border: 3px solid var(--line); border-radius: 16px; background: #fff; flex: none; }
