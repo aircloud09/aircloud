@@ -78,12 +78,29 @@ button { font-family: inherit; color: inherit; border: 0; background: none; padd
 .lv-pick button { padding: 12px 4px; font-size: 18px; border: 3px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 4px 0 var(--line); }
 .lv-pick button.on { background: var(--yellow); }
 .lv-pick button small { display: block; font-size: 12px; opacity: .7; }
+.cmap-unit { margin-bottom: 14px; }
+.cmap-unit h3 { margin: 0 0 6px; font-weight: 400; font-size: 18px; }
+.cmap-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.cmap-stages button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left; font-size: 15px; line-height: 1.2; border: 3px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 3px 0 var(--line); word-break: keep-all; }
+.cmap-stages button.boss { background: #f1ebff; }
+.cmap-stages button.lock { opacity: .45; }
+.cmap-stages button .st { font-size: 13px; letter-spacing: 1px; }
+.ccard { padding: 4px 0 10px; }
+.ccard li { margin-bottom: 7px; font-size: 16px; line-height: 1.4; word-break: keep-all; font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; font-weight: 600; }
+.ccard li mark { background: #fff1a8; color: var(--ink); padding: 0 3px; border-radius: 4px; font-weight: 800; }
+.ccard li.no mark { background: #ffd6db; }
+.ccard li.ok::marker { content: '✔ '; color: #129a55; } .ccard li.no::marker { content: '✘ '; color: #e23a4b; }
+.ctable { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 14px; }
+.ctable th, .ctable td { border: 2px solid var(--line); padding: 6px 5px; text-align: center; word-break: keep-all; }
+.ctable th { background: #f1ebff; font-weight: 400; }
+.ctable td.no { background: #ffd6db; }
 .home-games { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
 .game-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; width: 100%; }
 .game-card i { font-style: normal; font-size: 34px; width: 54px; height: 54px; display: grid; place-items: center; border: 3px solid var(--line); border-radius: 16px; background: #fff; flex: none; }
 .game-card b { display: block; font-size: 22px; font-weight: 400; }
 .game-card span { font-size: 14px; opacity: .7; }
 .game-card em { margin-left: auto; font-style: normal; font-size: 14px; white-space: nowrap; opacity: .85; }
+.g-concept { background: #fff1c9; }
 .g-runner { background: #d8f5c8; } .g-swipe { background: #ffe1ef; } .g-battle { background: #dfe6ff; }
 .home-nav { display: flex; gap: 10px; margin-top: 14px; }
 .home-nav button { flex: 1; padding: 9px 4px; font-size: 16px; box-shadow: 0 4px 0 var(--line); }

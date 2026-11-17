@@ -95,7 +95,9 @@ function wagonTextures(color) {
   return { side, front, roof };
 }
 
-export function createRunner({ session, hud, onEnd }) {
+// concept: 개념 학습 모드(체력이 깎이지 않고, 준비된 개념 문항을 다 풀면 끝난다)
+export function createRunner({ session, hud, onEnd, concept = false }) {
+  const showTime = concept ? 3.5 : SHOW_TIME;
   const scene = new T.Scene();
   scene.fog = new T.Fog(0xbfe9ff, 70, 330);
   makeSky(scene, 0x1f7bff, 0xbfe9ff, 0xbfe9ff);
@@ -390,7 +392,7 @@ export function createRunner({ session, hud, onEnd }) {
       : '보기마다 게이트가 따로 나와요. 정답 게이트만 통과하고 나머지는 피하세요!');
   function startQuestion() {
     run = new QRun(session.next());
-    phase = 'show'; showLeft = SHOW_TIME;
+    phase = 'show'; showLeft = showTime;
     hud.showQuestion(run.q, run.step, { opts: true, hint: HINT(run.step) });
     sfx.play('gate');
   }
@@ -463,10 +465,12 @@ export function createRunner({ session, hud, onEnd }) {
     run = null;
     if (!ok) loseHeart();
     else actor.once('Cheer', 'Running_A', { speed: 1.8 });
-    if (!over) { phase = 'run'; runLeft = rnd(8, 11); spawnGap = 6; }
+    // 개념 학습은 문항 사이를 짧게, 다 풀면 장애물 정리 후 끝
+    if (!over) { phase = concept && session.done ? 'clear' : 'run'; runLeft = concept ? rnd(1.5, 2.5) : rnd(8, 11); spawnGap = 6; }
   }
 
   function loseHeart() {
+    if (concept) return;   // 개념 학습에서는 체력이 깎이지 않는다
     hearts--;
     hud.setHearts(hearts);
     if (hearts <= 0) die();
@@ -480,7 +484,7 @@ export function createRunner({ session, hud, onEnd }) {
   function finish() {
     if (ended) return;
     ended = true;
-    onEnd({ score: coins, extra: `모은 코인 ${coins}개 · 달린 거리 ${Math.round(dist)}m` });
+    onEnd({ score: concept ? 0 : coins, extra: `모은 코인 ${coins}개 · 달린 거리 ${Math.round(dist)}m` });
   }
 
   // 해당 레인에서 플레이어 위치(z=0)에 있는 수레/경사로를 살핀다
@@ -561,18 +565,19 @@ export function createRunner({ session, hud, onEnd }) {
       cdT -= dt;
       if (cdT <= 0) {
         if (countdown > 0) { hud.center(String(countdown), 800); sfx.play('tick'); countdown--; cdT = 0.8; }
-        else { hud.center('출발!', 700); sfx.play('go'); phase = 'run'; runLeft = 7; spawnGap = 2; actor.play('Running_A'); }
+        else { hud.center('출발!', 700); sfx.play('go'); phase = 'run'; runLeft = concept ? 2.5 : 7; spawnGap = 2; actor.play('Running_A'); }
       }
     } else if (phase === 'run') {
       runLeft -= dt; spawnGap -= move;
       if (spawnGap <= 0 && runLeft > 0) spawnPattern();
       if (runLeft <= 0) phase = 'clear';
     } else if (phase === 'clear') {
-      if (!ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < 3)) startQuestion();
+      if (concept && session.done) { over = true; phase = 'done'; actor.once('Cheer', null); engine.wait(1.2, finish); }
+      else if (!ents.some((e) => (e.type === 'block' || e.type === 'solid') && e.z - (e.len || 0) < 3)) startQuestion();
     } else if (phase === 'show') {
       // 장애물 없이 달리면서 문제를 읽는다
       showLeft -= dt;
-      hud.timer(showLeft / SHOW_TIME);
+      hud.timer(showLeft / showTime);
       if (showLeft <= 0) toAnswerPhase();
     } else if (phase === 'answer') {
       // 장애물은 계속 나오고, 그 사이에 게이트를 하나씩 낸다

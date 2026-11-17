@@ -2,6 +2,7 @@
 import { store, bank, Session, api, answerText, stemText, WRONG_RATIO, TYPE_LABEL, BASIC_TYPES, mastery } from './core.js';
 import { engine, sfx, CHAR_NAMES } from './engine.js';
 import { hud } from './hud.js';
+import { concepts, ConceptSession } from './concept.js';
 import { createLobby } from './lobby.js';
 import { createRunner } from './runner.js';
 import { createSlash } from './slash.js';
@@ -39,6 +40,10 @@ function refreshHome() {
   $('stat-correct').textContent = d.correct;
   $('stat-review').textContent = Object.values(d.hist).filter((h) => h.w).length;
   $('quick-mastery').textContent = mastery().pct + '%';
+  if (concepts.units.length) {
+    const all = concepts.units.flatMap((u) => u.stages);
+    $('concept-progress').textContent = `${all.filter((st) => concepts.stars(st.id) > 0).length}/${all.length}`;
+  }
   $('quick-level').textContent = d.fixedLevel ? 'Lv.' + d.fixedLevel : `자동 Lv.${Math.round(d.level)}`;
   for (const k of Object.keys(GAMES)) $('best-' + k).textContent = d.scores[k] ? `${GAMES[k].icon} ${d.scores[k]}` : '';
   api.top().then((r) => { $('stat-rank').textContent = r.me && r.me.rank ? r.me.rank + '위' : '-'; }).catch(() => { $('stat-rank').textContent = '-'; });
@@ -77,6 +82,7 @@ function startGame(key) {
   hud.show();
   // 새 유형(빈칸, 틀린 곳 찾기 등)은 지식 러너에서만 낸다
   const session = new Session(key === 'runner' ? null : BASIC_TYPES);
+  $('hud-best').style.display = '';
   hud.initBest(GAMES[key].icon, store.d.scores[key]);
   api.top(key).then((r) => hud.setRankData(r)).catch(() => {});
   game = GAMES[key].create({ session, hud, onEnd: (info) => endGame(key, session, info) });
@@ -179,6 +185,76 @@ function showNotes() {
   bindReports();
 }
 
+// ---------- 개념 학습 ----------
+const starText = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
+async function showConceptMap() {
+  openModal('<h2>📚 개념 학습</h2><div class="empty">불러오는 중…</div>');
+  await concepts.load();
+  refreshHome();
+  const body = concepts.units.map((u) => `<div class="cmap-unit"><h3>${esc(u.unit)}</h3><div class="cmap-stages">${u.stages.map((st) => {
+    const open = concepts.unlocked(st);
+    return `<button data-st="${st.id}" class="${st.boss ? 'boss' : ''} ${open ? '' : 'lock'}">${st.boss ? '👑 ' : ''}${esc(st.title.replace('보스: ', ''))}<span class="st">${open ? starText(concepts.stars(st.id)) : '🔒 일반 스테이지를 모두 끝내면 열림'}</span></button>`;
+  }).join('')}</div></div>`).join('');
+  $('modal-body').innerHTML = `<h2>📚 개념 학습</h2><p class="sub">개념 카드를 먼저 읽고, 지식 러너에서 빈칸 게이트를 통과하며 복습합니다. 체력은 깎이지 않습니다. 단원의 스테이지를 모두 끝내면 👑 비교표 보스가 열립니다.</p>${body}`;
+  $('modal-body').querySelectorAll('[data-st]').forEach((b) => {
+    b.onclick = () => {
+      const st = concepts.byId[b.dataset.st];
+      sfx.play('click');
+      if (!concepts.unlocked(st)) return;
+      showConceptCard(st);
+    };
+  });
+}
+// 개념 카드(읽기). result가 있으면 맞힌 칸 ✔ / 틀린 칸 ✘ 표시
+function conceptCardHtml(st, result) {
+  if (st.kind === 'fill') {
+    return `<ol class="ccard">${st.items.map((it, i) => {
+      const cls = result ? (result.wrong.has(`${st.id}-${i}`) ? 'no' : 'ok') : '';
+      return `<li class="${cls}">${esc(it.text).replace(/\{(.+?)\}/, '<mark>$1</mark>')}</li>`;
+    }).join('')}</ol>`;
+  }
+  return `<table class="ctable"><tr><th></th>${st.cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>${st.rows.map((r, ri) => `<tr><th>${esc(r.label)}</th>${r.cells.map((c, ci) => `<td class="${result && result.wrong.has(`${st.id}-${ri}-${ci}`) ? 'no' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</table>`;
+}
+function showConceptCard(st) {
+  openModal(`<h2>${st.boss ? '👑 ' : '📖 '}${esc(st.title)}</h2>
+    <p class="sub">${esc(st.unit)} · ${st.kind === 'fill' ? '노란 부분이 빈칸으로 나옵니다. 충분히 읽고 시작하세요.' : '칸마다 "누구의 것인지" 게이트로 나옵니다. 표를 외우고 시작하세요.'}</p>
+    ${conceptCardHtml(st)}
+    <button class="btn primary" id="c-go">🏃 달리며 복습하기</button>
+    <button class="btn ghost" id="c-back">← 스테이지 목록</button>`);
+  $('c-go').onclick = () => { closeModal(); startConcept(st); };
+  $('c-back').onclick = () => { sfx.play('click'); showConceptMap(); };
+}
+function startConcept(st) {
+  sfx.unlock(); sfx.play('click');
+  $('home').classList.add('hidden');
+  hud.show();
+  hud._best = null; $('hud-best').innerHTML = ''; $('hud-best').style.display = 'none';
+  const session = new ConceptSession(st);
+  game = createRunner({ session, hud, concept: true, onEnd: () => endConcept(st, session) });
+  engine.use(game.stage);
+  sfx.music(true);
+}
+function endConcept(st, session) {
+  game = null;
+  sfx.music(false);
+  const r = session.result();
+  const d = store.d;
+  const prev = (d.concept[st.id] || {}).stars || 0;
+  if (r.stars > prev) d.concept[st.id] = { stars: r.stars };   // 가장 좋은 기록만 남긴다
+  store.save();
+  showHome();
+  if (r.stars === 3) lobby.cheer();
+  const msg = !r.finished ? '중간에 그만두어 기록되지 않았습니다.' : `${r.n}개 중 ${r.n - r.wrong.size}개 정답 · ${starText(r.stars)}`;
+  openModal(`<h2>${esc(st.title)} 결과</h2>
+    <p style="text-align:center;font-size:20px">${msg}</p>
+    ${r.finished && r.stars < 3 ? '<p class="sub">빨간 칸을 다시 확인하고 한 번 더 도전해 보세요. 별 3개를 받으면 완벽!</p>' : ''}
+    ${conceptCardHtml(st, r.finished ? r : null)}
+    <button class="btn primary" id="c-again">다시 하기</button>
+    <button class="btn ghost" id="c-map">스테이지 목록</button>`);
+  $('c-again').onclick = () => { closeModal(); showConceptCard(st); };
+  $('c-map').onclick = () => { sfx.play('click'); showConceptMap(); };
+}
+
 // ---------- 숙지도 ----------
 function barColor(p) { return p >= 80 ? 'var(--green)' : p >= 50 ? 'var(--yellow)' : p >= 20 ? '#ff9f43' : 'var(--red)'; }
 function showMastery() {
@@ -274,6 +350,8 @@ async function boot() {
   $('btn-rank').onclick = () => { sfx.unlock(); sfx.play('click'); showRank('total'); };
   $('btn-notes').onclick = () => { sfx.unlock(); sfx.play('click'); showNotes(); };
   $('btn-settings').onclick = () => { sfx.unlock(); sfx.play('click'); showSettings(); };
+  $('btn-concept').onclick = () => { sfx.unlock(); sfx.play('click'); showConceptMap(); };
+  concepts.load().then(refreshHome).catch(() => {});
   $('btn-mastery').onclick = () => { sfx.unlock(); sfx.play('click'); showMastery(); };
   $('btn-level').onclick = () => { sfx.unlock(); sfx.play('click'); showLevel(); };
   $('btn-nick').onclick = () => { sfx.unlock(); sfx.play('click'); askNickname(false); };

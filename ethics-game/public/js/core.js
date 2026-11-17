@@ -37,6 +37,7 @@ const DEFAULTS = () => ({
   level: 2, fixedLevel: 0,
   // hist[group] = { w: 한 번이라도 틀렸는지, n: 푼 횟수, last: 마지막으로 푼 순번, v: 마지막에 나온 변형 id }
   hist: {}, recent: [],
+  concept: {},   // 개념 학습 스테이지별 { stars }
   best: { runner: 0, slash: 0, battle: 0 },
   // 게임별 최고 점수(한 판 기준): 러너=코인, 슬래시=벤 물건, 배틀=격파한 상대
   scores: { runner: 0, slash: 0, battle: 0 },
@@ -50,7 +51,7 @@ export const store = {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const p = JSON.parse(raw), def = DEFAULTS();
-        this.d = { ...def, ...p, best: { ...def.best, ...p.best }, scores: { ...def.scores, ...p.scores }, opts: { ...def.opts, ...p.opts } };
+        this.d = { ...def, ...p, concept: { ...def.concept, ...p.concept }, best: { ...def.best, ...p.best }, scores: { ...def.scores, ...p.scores }, opts: { ...def.opts, ...p.opts } };
         if (!p.hist) {
           for (const id of p.seen || []) this.d.hist[id] = { w: false, n: 1, last: 0 };
           for (const id of Object.keys(p.srs || {})) this.d.hist[id] = { w: true, n: 1, last: 0 };
@@ -82,7 +83,7 @@ export const bank = {
 };
 
 // 화면에 낼 형태로 가공(보기 섞기 등)
-function prepare(q) {
+export function prepare(q) {
   const p = JSON.parse(JSON.stringify(q));
   if (p.type === 'choice') {
     p.opts = shuffle(p.options.map((text, i) => ({ text, correct: i === p.answer })));

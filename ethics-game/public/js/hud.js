@@ -73,8 +73,9 @@ export const hud = {
     if (p.classList.contains('side') !== !!cfg.side) { p.style.animation = 'none'; void p.offsetWidth; p.style.animation = ''; }
     p.classList.toggle('side', !!cfg.side);
     if (fresh) { p.style.animation = 'none'; void p.offsetWidth; p.style.animation = ''; }
-    $('q-type').textContent = TYPE_LABEL[q.type];
-    $('q-lv').textContent = 'Lv.' + q.level;
+    $('q-type').textContent = q.badge || TYPE_LABEL[q.type];
+    $('q-lv').textContent = q.level ? 'Lv.' + q.level : '';
+    $('q-lv').style.display = q.level ? '' : 'none';
     $('q-review').style.display = q.isReview ? '' : 'none';
     $('q-prog').textContent = step.total > 1 ? `${step.index + 1} / ${step.total}` : '';
     const pass = $('q-passage');
