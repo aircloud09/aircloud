@@ -81,7 +81,7 @@ function startGame(key) {
   $('home').classList.add('hidden');
   hud.show();
   // 새 유형(빈칸, 틀린 곳 찾기 등)은 지식 러너에서만 낸다
-  const session = new Session(key === 'runner' ? null : BASIC_TYPES);
+  const session = key === 'runner' ? new Session(null, store.d.opts.runnerUnits) : new Session(BASIC_TYPES);
   $('hud-best').style.display = '';
   hud.initBest(GAMES[key].icon, store.d.scores[key]);
   api.top(key).then((r) => hud.setRankData(r)).catch(() => {});
@@ -183,6 +183,38 @@ function showNotes() {
     : '<div class="empty">아직 틀린 문제가 없습니다.</div>';
   openModal(`<h2>📒 오답노트</h2><p class="sub">한 번이라도 틀린 문제는 다시 맞혀도 계속 나옵니다. 출제 비율은 틀린 문제·안 푼 문제 ${Math.round(WRONG_RATIO * 100)}%(둘이 반반), 맞힌 문제 ${Math.round((1 - WRONG_RATIO) * 100)}%입니다.</p>${body}`);
   bindReports();
+}
+
+// ---------- 지식 러너 범위 선택 ----------
+function showRunnerRange() {
+  const units = [...new Set(bank.list.map((q) => q.unit))].sort();
+  const d = store.d;
+  let sel = new Set(d.opts.runnerUnits || []);   // 비어 있으면 전체
+  const count = () => bank.groups ? [...bank.groups.values()].filter((l) => !sel.size || sel.has(l[0].unit.slice(0, 2))).length : 0;
+  const draw = () => {
+    const all = !sel.size;
+    $('modal-body').innerHTML = `<h2>🏃 지식 러너 · 범위 선택</h2>
+      <p class="sub">문제를 낼 프린트를 고르세요. 여러 개를 고를 수 있습니다.</p>
+      <div class="lv-pick" style="grid-template-columns:1fr 1fr">
+        <button data-u="all" class="${all ? 'on' : ''}" style="grid-column:1/-1">전체<small>모든 프린트</small></button>
+        ${units.map((u) => `<button data-u="${u.slice(0, 2)}" class="${!all && sel.has(u.slice(0, 2)) ? 'on' : ''}">${esc(u.slice(0, 2))}번<small>${esc(u.slice(3))}</small></button>`).join('')}
+      </div>
+      <p class="sub" style="text-align:center">선택한 범위의 문제 ${count()}개</p>
+      <button class="btn primary" id="r-go">🏃 시작하기</button>`;
+    $('modal-body').querySelectorAll('[data-u]').forEach((b) => {
+      b.onclick = () => {
+        sfx.play('click');
+        const u = b.dataset.u;
+        if (u === 'all') sel = new Set();
+        else { if (sel.has(u)) sel.delete(u); else sel.add(u); if (sel.size === units.length) sel = new Set(); }
+        d.opts.runnerUnits = [...sel]; store.save();
+        draw();
+      };
+    });
+    $('r-go').onclick = () => { closeModal(); startGame('runner'); };
+  };
+  openModal('');
+  draw();
 }
 
 // ---------- 개념 학습 ----------
@@ -346,7 +378,9 @@ async function boot() {
   $('loading').classList.add('out');
   setTimeout(() => $('loading').classList.add('hidden'), 450);
 
-  document.querySelectorAll('.game-card').forEach((b) => { b.onclick = () => startGame(b.dataset.game); });
+  document.querySelectorAll('.game-card[data-game]').forEach((b) => {
+    b.onclick = () => { if (b.dataset.game === 'runner') { sfx.unlock(); sfx.play('click'); showRunnerRange(); } else startGame(b.dataset.game); };
+  });
   $('btn-rank').onclick = () => { sfx.unlock(); sfx.play('click'); showRank('total'); };
   $('btn-notes').onclick = () => { sfx.unlock(); sfx.play('click'); showNotes(); };
   $('btn-settings').onclick = () => { sfx.unlock(); sfx.play('click'); showSettings(); };

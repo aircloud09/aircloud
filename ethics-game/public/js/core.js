@@ -41,7 +41,7 @@ const DEFAULTS = () => ({
   best: { runner: 0, slash: 0, battle: 0 },
   // 게임별 최고 점수(한 판 기준): 러너=코인, 슬래시=벤 물건, 배틀=격파한 상대
   scores: { runner: 0, slash: 0, battle: 0 },
-  opts: { sound: true, music: true, quality: 'auto', char: 'knight' },
+  opts: { sound: true, music: true, quality: 'auto', char: 'knight', runnerUnits: [] },
 });
 
 export const store = {
@@ -260,8 +260,9 @@ export function mastery() {
 
 export class Session {
   // types: 이 판에서 낼 유형 목록(없으면 전부)
-  constructor(types = null) { this.count = 0; this.reviews = 0; this.correct = 0; this.log = []; this.lastId = null; this.allow = types ? new Set(types) : null; }
-  ok(q) { return !!q && (!this.allow || this.allow.has(q.type)); }
+  // units: 낼 프린트 번호 목록(예: ['09', '10']). 비어 있으면 전체
+  constructor(types = null, units = null) { this.count = 0; this.reviews = 0; this.correct = 0; this.log = []; this.lastId = null; this.allow = types ? new Set(types) : null; this.units = units && units.length ? new Set(units) : null; }
+  ok(q) { return !!q && (!this.allow || this.allow.has(q.type)) && (!this.units || this.units.has(q.unit.slice(0, 2))); }
 
   get targetLevel() {
     const d = store.d;
